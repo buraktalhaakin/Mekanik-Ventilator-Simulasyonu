@@ -1,0 +1,1355 @@
+<meta charset="utf-8">
+<title>Mekanik Ventilasyon Simülatörü</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#070b10; --panel:#0e151f; --panel2:#121b27; --raise:#17222f;
+    --line:#1d2a39; --line2:#26384a;
+    --ink:#dbe6f0; --muted:#7f92a5; --faint:#4c5d6f;
+    --spo2:#25c3f0; --co2:#f7b733; --paw:#37d99a; --flow:#22d3ee; --vol:#f7b733;
+    --hr:#37d99a; --abp:#f26d84; --loop:#a78bfa;
+    --accent:#2dd4bf; --accent-ink:#052b28;
+    --good:#37d99a; --warn:#f7b733; --crit:#fb5163;
+    --mono:"Cascadia Code","Cascadia Mono",ui-monospace,"Segoe UI Mono",Consolas,monospace;
+    --sans:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 20% -10%, #0c1622 0%, transparent 60%),var(--bg);
+    color:var(--ink); font-family:var(--sans); font-size:14.5px; line-height:1.4; -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1480px; margin:0 auto; padding:14px clamp(10px,2vw,22px) 40px;}
+
+  /* banner */
+  .banner{display:flex; flex-wrap:wrap; align-items:stretch; gap:12px; margin-bottom:12px;}
+  .id-card{flex:1 1 300px; background:linear-gradient(180deg,var(--panel2),var(--panel));
+    border:1px solid var(--line); border-radius:12px; padding:12px 16px; display:flex; gap:16px; align-items:center;}
+  .id-card .avatar{width:44px;height:44px;border-radius:10px;flex:none;
+    background:radial-gradient(circle at 35% 30%, #2f4356, #16222f); border:1px solid var(--line2); display:grid;place-items:center; font-size:22px}
+  .id-name{font-weight:650; font-size:16px}
+  .id-sub{color:var(--muted); font-size:12.5px; margin-top:2px}
+  .id-sub b{color:var(--ink); font-weight:600}
+  .pills{display:flex; gap:6px; margin-top:6px; flex-wrap:wrap}
+  .pill{font-size:10.5px; font-family:var(--mono); padding:2px 7px; border-radius:20px; border:1px solid var(--line2); color:var(--muted)}
+  .pill.on{border-color:var(--accent); color:var(--accent)}
+  .pill.bad{border-color:#5a2530; color:var(--crit)}
+  .clock-card{flex:0 0 auto; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px 16px;
+    display:flex; flex-direction:column; justify-content:center; text-align:right}
+  .clock-card .lbl{font-size:10px; letter-spacing:1.2px; text-transform:uppercase; color:var(--faint)}
+  .clock-card .val{font-family:var(--mono); font-size:22px; font-variant-numeric:tabular-nums}
+  .alarm-strip{flex:1 1 260px; min-width:220px; border-radius:12px; padding:10px 16px; display:flex; align-items:center; gap:12px;
+    border:1px solid var(--line); background:var(--panel); transition:.25s}
+  .alarm-strip .dot{width:11px;height:11px;border-radius:50%;background:var(--good);flex:none;box-shadow:0 0 0 4px rgba(55,217,154,.15)}
+  .alarm-strip .a-txt{font-size:13.5px; font-weight:600}
+  .alarm-strip .a-sub{font-size:11.5px;color:var(--muted)}
+  .alarm-strip.warn{border-color:#4a3c17; background:linear-gradient(180deg,#1c1607,#12100a)}
+  .alarm-strip.warn .dot{background:var(--warn); box-shadow:0 0 0 4px rgba(247,183,51,.16)}
+  .alarm-strip.crit{border-color:#4d1e28; background:linear-gradient(180deg,#22090f,#160a0d); animation:pulseCrit 1s infinite}
+  .alarm-strip.crit .dot{background:var(--crit); box-shadow:0 0 0 4px rgba(251,81,99,.2)}
+  @keyframes pulseCrit{0%,100%{border-color:#4d1e28}50%{border-color:#8a2b39}}
+
+  .grid{display:grid; grid-template-columns:1.62fr .95fr; gap:12px; align-items:start}
+  @media(max-width:1020px){.grid{grid-template-columns:1fr}}
+  .col{display:flex; flex-direction:column; gap:12px; min-width:0}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:12px}
+  .card-h{display:flex; align-items:center; justify-content:space-between; padding:9px 14px; border-bottom:1px solid var(--line); gap:8px}
+  .card-h h2{margin:0; font-size:11px; letter-spacing:1.4px; text-transform:uppercase; color:var(--muted); font-weight:650}
+  .card-h .tag{font-size:10.5px; color:var(--faint); font-family:var(--mono)}
+
+  .scope{padding:8px 8px 4px}
+  canvas{display:block; width:100%; height:auto; border-radius:8px; background:#060a0f}
+  .mini-row{display:grid; grid-template-columns:1fr; gap:8px; padding:8px}
+  .mini{background:#060a0f; border:1px solid var(--line); border-radius:8px; padding:4px 6px 2px}
+  .mini .ml{font-size:10px; letter-spacing:.5px; text-transform:uppercase; color:var(--muted); padding:2px 4px}
+
+  .vitals{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; padding:10px}
+  @media(max-width:560px){.vitals{grid-template-columns:repeat(2,1fr)}}
+  .vital{background:linear-gradient(180deg,var(--panel2),#0c131c); border:1px solid var(--line); border-radius:10px; padding:8px 10px 9px}
+  .vital .vl{display:flex; align-items:baseline; justify-content:space-between}
+  .vital .name{font-size:10.5px; letter-spacing:.9px; text-transform:uppercase; color:var(--muted); font-weight:600}
+  .vital .unit{font-size:10px; color:var(--faint); font-family:var(--mono)}
+  .vital .num{font-family:var(--mono); font-variant-numeric:tabular-nums; font-weight:600; line-height:1; font-size:33px; margin-top:5px; letter-spacing:-.5px}
+  .vital .rng{font-size:10.5px; color:var(--faint); margin-top:4px; font-family:var(--mono)}
+  .vital.alarm{border-color:#5a2530; box-shadow:inset 0 0 0 1px #5a2530}
+  .vital.alarm .num{color:var(--crit)!important; animation:blink 1s steps(1) infinite}
+  @keyframes blink{50%{opacity:.35}}
+
+  .mech{display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line); border-radius:0 0 12px 12px; overflow:hidden}
+  @media(max-width:560px){.mech{grid-template-columns:repeat(2,1fr)}}
+  .mcell{background:var(--panel); padding:9px 12px}
+  .mcell .mk{font-size:10px; letter-spacing:.6px; text-transform:uppercase; color:var(--muted)}
+  .mcell .mv{font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:18px; margin-top:2px}
+  .mcell .mv small{font-size:11px;color:var(--faint)}
+  .mcell.hot .mv{color:var(--crit)} .mcell.ok .mv{color:var(--good)} .mcell.warn .mv{color:var(--warn)}
+
+  .segrow{display:flex; gap:8px; padding:12px 14px; flex-wrap:wrap}
+  .seg{flex:1; display:flex; background:#0a121b; border:1px solid var(--line); border-radius:9px; padding:3px; gap:3px; min-width:100%; flex-wrap:wrap}
+  .seg button{flex:1 1 30%; border:0; background:transparent; color:var(--muted); font-family:var(--sans); font-size:11.5px; font-weight:600; padding:7px 4px; border-radius:6px; cursor:pointer; transition:.15s}
+  .seg button:hover{color:var(--ink)}
+  .seg button[aria-pressed="true"]{background:var(--accent); color:var(--accent-ink)}
+  .field{display:flex;flex-direction:column;gap:3px}
+  .field>label{font-size:11px;color:var(--muted);font-weight:600}
+  select{width:100%; background:#0a121b; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-family:var(--sans); font-size:13px}
+
+  .ctrls{padding:6px 14px 14px; display:flex; flex-direction:column; gap:12px}
+  .ctrl .top{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:4px}
+  .ctrl .cn{font-size:12.5px; font-weight:600}
+  .ctrl .cv{font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:15px; color:var(--accent)}
+  .ctrl .cv small{color:var(--muted); font-size:11px; margin-left:4px}
+  input[type=range]{-webkit-appearance:none; appearance:none; width:100%; height:6px; border-radius:6px;
+    background:linear-gradient(90deg,var(--accent) var(--pct,40%), #1a2634 var(--pct,40%)); outline:none; cursor:pointer}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:18px;height:18px;border-radius:50%; background:#eaf6f4; border:3px solid var(--accent); box-shadow:0 1px 4px rgba(0,0,0,.5); cursor:pointer}
+  input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:#eaf6f4;border:3px solid var(--accent);cursor:pointer}
+  input[type=range]:focus-visible{box-shadow:0 0 0 3px rgba(45,212,191,.35)}
+  input[type=range].sed{background:linear-gradient(90deg,#8a6ad8 var(--pct,40%), #1a2634 var(--pct,40%))}
+  input[type=range].sed::-webkit-slider-thumb{border-color:#a78bfa}
+
+  .btngrid{display:grid; grid-template-columns:repeat(2,1fr); gap:8px; padding:12px 14px}
+  .abtn{border:1px solid var(--line2); background:var(--raise); color:var(--ink); font-family:var(--sans); font-weight:600; font-size:12px; padding:9px 8px; border-radius:8px; cursor:pointer; transition:.15s; text-align:left; line-height:1.25}
+  .abtn:hover{border-color:var(--accent); color:#eafffb}
+  .abtn:disabled{opacity:.4; cursor:not-allowed}
+  .abtn.on{border-color:var(--accent); background:rgba(45,212,191,.12); color:#eafffb}
+  .abtn small{display:block; color:var(--faint); font-weight:400; font-size:10.5px; margin-top:1px}
+  .abtn.evt{border-color:#3a2530}
+  .abtn.evt:hover{border-color:var(--crit); color:#ffd9de}
+  .abtn.evt.active{border-color:var(--crit); background:rgba(251,81,99,.12); color:#ffd9de}
+
+  .toggle-row{display:flex; align-items:center; justify-content:space-between; padding:2px 2px 6px}
+  .switch{position:relative; width:44px; height:24px; flex:none}
+  .switch input{opacity:0;width:0;height:0}
+  .slider-sw{position:absolute; inset:0; background:#1a2634; border:1px solid var(--line2); border-radius:20px; transition:.2s; cursor:pointer}
+  .slider-sw:before{content:""; position:absolute; height:16px; width:16px; left:3px; top:3px; background:#eaf6f4; border-radius:50%; transition:.2s}
+  .switch input:checked + .slider-sw{background:var(--accent); border-color:var(--accent)}
+  .switch input:checked + .slider-sw:before{transform:translateX(20px)}
+  .switch input:focus-visible + .slider-sw{box-shadow:0 0 0 3px rgba(45,212,191,.35)}
+
+  .abg{padding:12px 14px 14px}
+  .abg-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:9px; overflow:hidden; margin-top:10px}
+  .abg-grid.stale{opacity:.4}
+  .acell{background:var(--panel2); padding:8px 10px}
+  .acell .ak{font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--muted)}
+  .acell .av{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:16px;margin-top:2px}
+  .acell .av.lo{color:var(--spo2)} .acell .av.hi{color:var(--co2)} .acell .av.crit{color:var(--crit)} .acell .av.ok{color:var(--good)}
+  .btn{border:1px solid var(--line2); background:var(--raise); color:var(--ink); font-family:var(--sans); font-weight:600; font-size:12.5px; padding:8px 12px; border-radius:8px; cursor:pointer; transition:.15s}
+  .btn:hover{border-color:var(--accent); color:#eafffb}
+  .btn.primary{background:var(--accent); color:var(--accent-ink); border-color:var(--accent)}
+  .btn.ghost{background:transparent}
+  .btn:disabled{opacity:.5;cursor:progress}
+  .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+  .sndbtn{border:1px solid var(--line2); background:#0a121b; color:var(--muted); font-family:var(--sans); font-size:11px; font-weight:600; padding:4px 9px; border-radius:7px; cursor:pointer; transition:.15s; letter-spacing:.2px}
+  .sndbtn:hover{color:var(--ink); border-color:var(--accent)}
+  .sndbtn[aria-pressed="true"]{background:rgba(45,212,191,.14); border-color:var(--accent); color:#eafffb}
+
+  .targets{padding:6px 14px 14px; display:flex; flex-wrap:wrap; gap:6px}
+  .chip{font-size:11px; font-family:var(--mono); color:var(--muted); background:#0a121b; border:1px solid var(--line); border-radius:6px; padding:4px 8px}
+  .chip b{color:var(--ink)}
+  .coach{padding:6px 14px 14px; display:flex; flex-direction:column; gap:6px; min-height:40px}
+  .cue{display:flex; gap:9px; align-items:flex-start; font-size:12.5px; padding:7px 10px; border-radius:8px; border:1px solid var(--line); background:#0a121b; line-height:1.35}
+  .cue .ci{width:7px;height:7px;border-radius:50%;margin-top:5px;flex:none}
+  .cue.g{border-color:#173226} .cue.g .ci{background:var(--good)}
+  .cue.w{border-color:#3a2f12} .cue.w .ci{background:var(--warn)}
+  .cue.c{border-color:#43151d} .cue.c .ci{background:var(--crit)}
+  .cue small{color:var(--muted)}
+
+  .wcrit{display:flex; align-items:flex-start; gap:8px; font-size:12.5px; padding:4px 0; color:var(--muted); line-height:1.35}
+  .wcrit .wci{flex:none; width:16px; font-weight:700}
+  .wcrit.ok{color:var(--ink)} .wcrit.ok .wci{color:var(--good)}
+  .wcrit.no .wci{color:var(--crit)}
+
+  .status{padding:12px 14px 14px}
+  .stat-top{display:flex; align-items:center; justify-content:space-between; gap:12px}
+  .stat-label{font-size:20px; font-weight:700}
+  .stat-idx{font-family:var(--mono); font-size:14px; color:var(--muted)}
+  .bar{height:9px; border-radius:6px; background:#0a121b; border:1px solid var(--line); overflow:hidden; margin-top:10px}
+  .bar>i{display:block; height:100%; width:50%; border-radius:6px; transition:width .5s, background .5s}
+  .spark{width:100%; height:44px; margin-top:10px; display:block}
+  .foot{display:flex; justify-content:space-between; margin-top:8px; font-size:11px; color:var(--faint); font-family:var(--mono)}
+
+  .hint{font-size:11.5px; color:var(--faint); padding:2px 4px 0; line-height:1.5}
+  .subhead{font-size:10.5px; letter-spacing:1px; text-transform:uppercase; color:var(--faint); padding:10px 14px 2px; font-weight:650}
+
+  .case{padding:11px 14px 13px; display:flex; flex-direction:column; gap:7px}
+  .case .cl{display:grid; grid-template-columns:104px 1fr; gap:8px; font-size:12.5px; line-height:1.4}
+  .case .ck{font-size:10.5px; letter-spacing:.5px; text-transform:uppercase; color:var(--faint); padding-top:1px}
+  .case .cvv{color:var(--ink)}
+  .case .cvv b{color:var(--accent); font-weight:600}
+  .case .abgline{font-family:var(--mono); font-size:12px; background:#0a121b; border:1px solid var(--line); border-radius:7px; padding:6px 9px; color:var(--muted)}
+  .case .abgline b{color:var(--ink)}
+  .case .goal{border-left:2px solid var(--accent); padding:2px 0 2px 10px; color:var(--ink); font-size:12.5px}
+
+  /* hover ipucu kutuları */
+  .tipable,.mcell{cursor:help}
+  .tipable{position:relative}
+  .tipable::before{content:"?"; position:absolute; top:6px; right:8px; width:13px; height:13px; border-radius:50%; border:1px solid var(--line2);
+    color:var(--faint); font-size:9px; line-height:12px; text-align:center; opacity:.55; transition:.15s}
+  .tipable:hover::before{opacity:1; border-color:var(--accent); color:var(--accent)}
+  #tip{position:fixed; z-index:90; max-width:270px; background:#0b1622; border:1px solid var(--line2); color:var(--ink);
+    font-size:11.5px; line-height:1.45; padding:9px 11px; border-radius:9px; box-shadow:0 8px 26px rgba(0,0,0,.55);
+    pointer-events:none; opacity:0; transition:opacity .1s; left:0; top:0}
+  #tip.show{opacity:1}
+  #tip b{color:var(--accent)}
+
+  /* modal */
+  .modal{position:fixed; inset:0; background:rgba(6,9,13,.82); backdrop-filter:blur(3px); display:none; place-items:center; z-index:60; padding:20px}
+  .modal.show{display:grid}
+  .modal .box{max-width:560px; width:100%; max-height:88vh; overflow:auto; background:var(--panel2); border:1px solid var(--line2); border-radius:16px; padding:22px 24px}
+  .modal .box.arrest{border-color:#4d1e28; text-align:center; max-width:440px}
+  .modal h3{margin:0 0 4px; font-size:20px}
+  .modal .arrest h3{color:var(--crit)}
+  .modal p{color:var(--muted); font-size:13px; margin:0 0 16px}
+  .grade{font-size:44px; font-weight:800; font-family:var(--mono); line-height:1}
+  .domrow{display:grid; grid-template-columns:150px 1fr 34px; gap:10px; align-items:center; margin:6px 0; font-size:12.5px}
+  .domrow .dn{color:var(--muted)}
+  .dombar{height:9px; border-radius:6px; background:#0a121b; border:1px solid var(--line); overflow:hidden}
+  .dombar>i{display:block; height:100%; border-radius:6px}
+  .domrow .dv{font-family:var(--mono); text-align:right; font-variant-numeric:tabular-nums}
+  .dbg-stats{display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:9px; overflow:hidden; margin-top:4px}
+  @media(max-width:520px){.dbg-stats{grid-template-columns:1fr}}
+  .stt{background:var(--panel); padding:7px 11px; display:flex; justify-content:space-between; align-items:baseline; gap:10px}
+  .stt .stk{font-size:11px; color:var(--muted)}
+  .stt .stv{font-family:var(--mono); font-size:12.5px; font-variant-numeric:tabular-nums; white-space:nowrap}
+  .stt .stv.ok{color:var(--good)} .stt .stv.warn{color:var(--warn)} .stt .stv.crit{color:var(--crit)}
+  .dbg-list{margin:10px 0 4px; padding:0; list-style:none; display:flex; flex-direction:column; gap:5px}
+  .dbg-list li{font-size:12.5px; display:flex; gap:8px; padding:6px 10px; border-radius:7px; background:var(--panel); border:1px solid var(--line)}
+  .dbg-list li .ci{width:7px;height:7px;border-radius:50%;margin-top:5px;flex:none}
+  .lead{font-size:13px; color:var(--muted); margin:2px 0 14px; max-width:70ch}
+  .protorow{display:grid; grid-template-columns:repeat(6,1fr); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:8px; overflow:hidden; font-family:var(--mono); font-size:11px}
+  .protorow div{background:var(--panel); padding:5px 4px; text-align:center}
+  .protorow .h{color:var(--muted); font-size:9.5px}
+  .protorow .cur{background:rgba(45,212,191,.16); color:#eafffb}
+</style>
+
+<div class="wrap">
+  <div class="banner">
+    <div class="id-card">
+      <div class="avatar">🫁</div>
+      <div style="min-width:0">
+        <div class="id-name" id="pt-name">—</div>
+        <div class="id-sub" id="pt-sub">—</div>
+        <div class="pills" id="pt-pills"></div>
+      </div>
+    </div>
+    <div class="clock-card">
+      <div class="lbl">Ventilatörde süre</div>
+      <div class="val" id="clock">00:00</div>
+    </div>
+    <div class="alarm-strip" id="alarm">
+      <span class="dot"></span>
+      <div><div class="a-txt" id="alarm-txt">Sistem hazır</div><div class="a-sub" id="alarm-sub">Hastayı stabilize edin</div></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- MONITOR -->
+    <div class="col">
+      <div class="card">
+        <div class="card-h"><h2>Ventilatör dalga formları</h2><span class="tag" id="scope-tag">P · Akım · Volüm</span></div>
+        <div class="scope"><canvas id="scope" width="900" height="300"></canvas></div>
+        <div class="mini-row">
+          <div class="mini"><div class="ml">Kapnografi · EtCO₂ (shark-fin = obstrüksiyon)</div><canvas id="capno" width="880" height="104"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><h2>Hasta monitörü</h2><div class="row" style="gap:10px"><button class="sndbtn" id="snd-btn" aria-pressed="false" title="Ventilasyon bozulunca/instabilitede alarm sesi">🔕 Alarm</button><span class="tag" id="mon-tag">sürekli</span></div></div>
+        <div class="vitals">
+          <div class="vital tipable" id="v-spo2" data-tipkey="SpO₂"><div class="vl"><span class="name">SpO₂</span><span class="unit">%</span></div><div class="num" style="color:var(--spo2)">—</div><div class="rng">hedef 88–95</div></div>
+          <div class="vital tipable" id="v-etco2" data-tipkey="etCO₂"><div class="vl"><span class="name">etCO₂</span><span class="unit">mmHg</span></div><div class="num" style="color:var(--co2)">—</div><div class="rng">hedef 30–45</div></div>
+          <div class="vital tipable" id="v-hr" data-tipkey="Nabız"><div class="vl"><span class="name">Nabız</span><span class="unit">/dk</span></div><div class="num" style="color:var(--hr)">—</div><div class="rng">hedef 60–100</div></div>
+          <div class="vital tipable" id="v-abp" data-tipkey="Kan bas."><div class="vl"><span class="name">Kan bas.</span><span class="unit">mmHg</span></div><div class="num" style="color:var(--abp);font-size:25px;margin-top:9px">—</div><div class="rng">OAB &gt; 65</div></div>
+        </div>
+        <div class="mech" id="mech"></div>
+      </div>
+    </div>
+
+    <!-- VENTILATOR / MANAGEMENT -->
+    <div class="col">
+      <div class="card" id="case-card">
+        <div class="card-h"><h2>Vaka sunumu</h2><span class="tag" id="case-day">—</span></div>
+        <div class="case" id="case-body"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><h2>Ventilatör — kontrol</h2><span class="tag" id="mode-tag">VC-AC</span></div>
+        <div class="segrow">
+          <div class="seg" id="seg-mode" role="group" aria-label="Ventilasyon modu">
+            <button data-mode="VC" aria-pressed="true">VC-AC</button>
+            <button data-mode="PC" aria-pressed="false">PC-AC</button>
+            <button data-mode="PS" aria-pressed="false">Basınç Desteği</button>
+            <button data-mode="SIMV" aria-pressed="false">SIMV</button>
+            <button data-mode="CPAP" aria-pressed="false">CPAP / SBT</button>
+          </div>
+        </div>
+        <div class="ctrls" id="ctrls"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><h2>Sedasyon &amp; konfor</h2><span class="tag" id="rass-tag">RASS 0</span></div>
+        <div class="ctrls" style="padding-bottom:8px">
+          <div class="ctrl">
+            <div class="top"><span class="cn">Sedasyon düzeyi</span><span class="cv"><span id="sed-v">0</span> <small id="sed-lbl">uyanık</small></span></div>
+            <input type="range" class="sed" id="sed" min="0" max="10" step="1" value="2">
+          </div>
+          <div class="toggle-row">
+            <div><div style="font-size:12.5px;font-weight:600">Nöromusküler blokaj</div><div class="hint" style="padding:0">Spontan çabayı ve uyumsuzluğu ortadan kaldırır</div></div>
+            <label class="switch"><input type="checkbox" id="paralysis"><span class="slider-sw"></span></label>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><h2>Yatak başı müdahaleler</h2><span class="tag">tedavi</span></div>
+        <div class="btngrid" id="interventions"></div>
+        <div class="field" id="vaso" style="padding:2px 14px 8px"></div>
+        <p class="hint" style="padding:2px 14px 12px">Komplikasyonlar klinik seyre ya da zararlı ayarlara (iyatrojenik) bağlı olarak <b>kendiliğinden</b> gelişir; bu düğmelerle tedavi edin.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><h2>Weaning / SBT</h2><span class="tag" id="wean-tag">değerlendirme</span></div>
+        <div class="wean" id="wean"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><h2>Arteriyel kan gazı</h2><span class="tag" id="abg-stamp">alınmadı</span></div>
+        <div class="abg">
+          <div class="row"><button class="btn primary" id="abg-btn">🩸 Kan gazı al</button>
+            <span class="hint" style="padding:0" id="abg-note">Sonuç ~birkaç saniyede çıkar (laboratuvar gecikmesi).</span></div>
+          <div class="abg-grid stale" id="abg-grid"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><h2>Hasta durumu</h2><span class="tag">trend</span></div>
+        <div class="status">
+          <div class="stat-top"><span class="stat-label" id="stat-label">—</span><span class="stat-idx" id="stat-idx">—</span></div>
+          <div class="bar"><i id="stat-bar"></i></div>
+          <canvas class="spark" id="spark" width="600" height="88"></canvas>
+          <div class="foot"><span>oksijenasyon (P/F) trendi</span><span id="spark-now">—</span></div>
+          <div class="row" style="margin-top:12px"><button class="btn" id="debrief-btn">📋 Debrief / karne</button>
+            <button class="btn ghost" id="pause">⏸ Duraklat</button>
+            <button class="btn ghost" id="reset">↺ Sıfırla</button></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><h2>Klinik geri bildirim</h2><span class="tag">canlı</span></div>
+        <div class="coach" id="coach"></div>
+        <div class="card-h" style="border-top:1px solid var(--line)"><h2>Hedefler</h2></div>
+        <div class="targets" id="targets"></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="hint" style="margin-top:18px; text-align:center; max-width:80ch; margin-left:auto; margin-right:auto">
+    ⚕️ Eğitim ve pratik amaçlı bir simülasyondur. Fizyoloji modeli basitleştirilmiştir; gerçek klinik karar, tedavi ya da hasta yönetimi için kullanılamaz.
+  </p>
+</div>
+
+<!-- Debrief modal -->
+<div class="modal" id="debrief">
+  <div class="box">
+    <div class="row" style="justify-content:space-between; align-items:flex-start">
+      <div><h3>Debrief karnesi</h3><p id="dbg-sub">Oturum performansı</p></div>
+      <div style="text-align:right"><div class="grade" id="dbg-grade">—</div><div class="hint" style="padding:0" id="dbg-gradelbl"></div></div>
+    </div>
+    <div class="subhead" style="padding-left:0">Alan skorları</div>
+    <div id="dbg-domains"></div>
+    <div class="subhead" style="padding-left:0">Ölçümler (oturum boyunca)</div>
+    <div class="dbg-stats" id="dbg-stats"></div>
+    <div class="subhead" style="padding-left:0">ARDSnet PEEP/FiO₂ merdiveni (düşük-PEEP)</div>
+    <div class="protorow" id="proto"></div>
+    <div class="subhead" style="padding-left:0">Notlar &amp; öneriler</div>
+    <ul class="dbg-list" id="dbg-notes"></ul>
+    <div class="row" style="margin-top:14px"><button class="btn primary" id="dbg-close">Kapat</button></div>
+  </div>
+</div>
+
+<!-- Arrest modal -->
+<div class="modal" id="arrest">
+  <div class="box arrest">
+    <h3>KARDİYAK ARREST</h3>
+    <p id="arrest-reason">Hasta uzun süre kritik durumda kaldı.</p>
+    <div class="row" style="justify-content:center"><button class="btn" id="arrest-debrief">Debrief</button><button class="btn primary" id="arrest-reset">Yeniden başlat</button></div>
+  </div>
+</div>
+
+<div id="tip" role="tooltip"></div>
+
+<script>
+"use strict";
+/* ==========================================================================
+   MEKANİK VENTİLASYON SİMÜLATÖRÜ v2 — fizyoloji + hasta-ventilatör etkileşimi
+   ========================================================================== */
+function so2FromPao2(p){ p=Math.max(p,1); const x=Math.pow(p,3)+150*p; return 1/(23400/x+1); }
+function pao2FromContent(caO2, hb){ let lo=5,hi=700,t=Math.max(caO2,0.05); for(let i=0;i<36;i++){const m=(lo+hi)/2,c=1.34*hb*so2FromPao2(m)+0.003*m; if(c<t)lo=m;else hi=m;} return (lo+hi)/2; }
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+
+const SCENARIOS={
+  ards:{ name:"A. Yılmaz", sex:"Erkek", age:58, height:176, dx:"ARDS (ağır) · pnömoni · sepsis",
+    C:30, R:12, shunt0:0.35, shuntMin:0.05, optPEEP:14, vdMult:1.0, vco2:220, hb:10, hco3:23, chronicCO2:false,
+    Crecover:56, Cinjured:12, shuntWorst:0.62, proneResp:true,
+    def:{mode:"VC",fio2:1.0,peep:5,vt:520,pinsp:18,ps:12,rr:16,ie:0.333,trig:2} },
+  copd:{ name:"H. Demir", sex:"Erkek", age:67, height:172, dx:"KOAH atağı · hava hapsi · CO₂ retansiyonu",
+    C:52, R:26, shunt0:0.14, shuntMin:0.06, optPEEP:6, vdMult:1.25, vco2:240, hb:14, hco3:32, chronicCO2:true,
+    Crecover:60, Cinjured:30, shuntWorst:0.30, proneResp:false,
+    def:{mode:"VC",fio2:0.5,peep:8,vt:520,pinsp:16,ps:12,rr:22,ie:0.333,trig:2} },
+  asthma:{ name:"E. Aydın", sex:"Kadın", age:34, height:168, dx:"Status astmatikus · ağır bronkospazm",
+    C:58, R:15, shunt0:0.12, shuntMin:0.06, optPEEP:5, vdMult:1.1, vco2:250, hb:13, hco3:22, chronicCO2:false,
+    Crecover:62, Cinjured:34, shuntWorst:0.28, proneResp:false, broncho0:0.8,
+    def:{mode:"VC",fio2:0.6,peep:5,vt:480,pinsp:16,ps:12,rr:20,ie:0.25,trig:2} },
+  normal:{ name:"S. Kaya", sex:"Kadın", age:44, height:165, dx:"Postop · elektif · sağlıklı akciğer",
+    C:62, R:8, shunt0:0.08, shuntMin:0.05, optPEEP:5, vdMult:0.95, vco2:210, hb:13, hco3:24, chronicCO2:false,
+    Crecover:66, Cinjured:34, shuntWorst:0.25, proneResp:false,
+    def:{mode:"VC",fio2:0.4,peep:5,vt:440,pinsp:14,ps:10,rr:14,ie:0.333,trig:2} },
+  cardiac:{ name:"—", sex:"Erkek", age:70, height:172, dx:"Kardiyojenik pulmoner ödem · akut kalp yetmezliği",
+    C:34, R:11, shunt0:0.32, shuntMin:0.06, optPEEP:13, vdMult:1.0, vco2:215, hb:12, hco3:22, chronicCO2:false,
+    Crecover:58, Cinjured:20, shuntWorst:0.55, proneResp:false, diuretic:true,
+    def:{mode:"VC",fio2:0.8,peep:5,vt:500,pinsp:18,ps:12,rr:18,ie:0.333,trig:2} },
+  pneumonia:{ name:"—", sex:"Erkek", age:60, height:174, dx:"Ağır pnömoni · orta ARDS",
+    C:40, R:12, shunt0:0.26, shuntMin:0.06, optPEEP:10, vdMult:1.05, vco2:235, hb:12, hco3:23, chronicCO2:false,
+    Crecover:60, Cinjured:22, shuntWorst:0.5, proneResp:true, secretionsProne:true,
+    def:{mode:"VC",fio2:0.7,peep:6,vt:500,pinsp:16,ps:12,rr:18,ie:0.333,trig:2} },
+  neuro:{ name:"—", sex:"Kadın", age:38, height:166, dx:"Nöromusküler solunum yetmezliği · Guillain-Barré (pompa yetmezliği)",
+    C:60, R:9, shunt0:0.10, shuntMin:0.05, optPEEP:5, vdMult:1.0, vco2:210, hb:13, hco3:26, chronicCO2:false,
+    Crecover:64, Cinjured:34, shuntWorst:0.28, proneResp:false, muscle:0.28, secretionsProne:true,
+    def:{mode:"PC",fio2:0.4,peep:5,vt:440,pinsp:12,ps:8,rr:14,ie:0.333,trig:2} },
+};
+const IE_OPTIONS=[["2:1",0.667],["1:1",0.5],["1:1.5",0.4],["1:2",0.333],["1:3",0.25],["1:4",0.2]];
+const RASS=["+1 huzursuz","0 uyanık sakin","-1 uykulu","-2 hafif sedasyon","-2 hafif sedasyon","-3 orta sedasyon","-3 orta sedasyon","-4 derin sedasyon","-4 derin sedasyon","-5 uyanmıyor","-5 uyanmıyor"];
+const TIME_SCALE=110;
+const PROTO=[[0.3,5],[0.4,5],[0.4,8],[0.5,8],[0.5,10],[0.6,10],[0.7,10],[0.7,12],[0.7,14],[0.8,14],[0.9,16],[1.0,18]];
+
+/* Vaka sunumu şablonları */
+const CASE_DATA={
+  ards:{ story:["5 gündür ateş, öksürük ve giderek artan nefes darlığı","grip benzeri tablo sonrası hızla kötüleşen solunum sıkıntısı","aspirasyon sonrası gelişen bilateral yaygın infiltratlar","intraabdominal sepsis zemininde akut solunum yetmezliği"],
+    comorb:["DM tip 2","hipertansiyon","obezite (VKİ 34)","aktif sigara öyküsü","bilinen ek hastalık yok"],
+    intub:["rezervuar maske ile SpO₂ %{sat}, artan solunum işi ve takipne","non-invaziv desteğe yanıtsız ağır hipoksemi"],
+    goal:"Akciğer koruyucu ventilasyon (≈6 mL/kg TVA, ΔP<15, plato<30), permisif hiperkapni ve PEEP titrasyonu; yanıt yetersizse rekrütman/prone." },
+  copd:{ story:["3 gündür artan dispne ve pürülan balgam","üst solunum yolu enfeksiyonu sonrası KOAH alevlenmesi","evde oksijenine rağmen kötüleşen nefes darlığı"],
+    comorb:["KOAH (GOLD D), ev tipi O₂","koroner arter hastalığı","kor pulmonale","30 paket-yıl sigara"],
+    intub:["NIV'e rağmen bilinç bulanıklığı ve pH {ph} / PaCO₂ {co2}","tükenme ve hiperkapnik ensefalopati"],
+    goal:"Bronkodilatasyon, oto-PEEP'ten kaçınma (uzun ekspiryum), kronik bazale (pH ≈7.35) dönüş; permisif hiperkapni." },
+  asthma:{ story:["ani başlayan şiddetli hışıltı ve konuşamama","alerjen maruziyeti sonrası dakikalar içinde kötüleşme","tedaviye dirençli ağır astım atağı"],
+    comorb:["bilinen astım, sık atak","alerjik rinit","son 1 yılda 2 yoğun bakım yatışı"],
+    intub:["sessiz akciğer, tükenme; adrenalin + MgSO₄ + steroide rağmen kötüleşme","solunum arresti öncesi entübasyon"],
+    goal:"Dinamik hiperinflasyondan kaçın (düşük SS, uzun ekspiryum), plato<30, permisif hiperkapni; bronkodilatör." },
+  normal:{ story:["elektif laparoskopik kolesistektomi, genel anestezi","planlı cerrahi sonrası kısa süreli ventilasyon"],
+    comorb:["ASA II","hafif hipertansiyon","ek sorun yok"],
+    intub:["elektif genel anestezi endüksiyonu"],
+    goal:"Kısa süreli koruyucu ventilasyon, uyandırma ve erken ekstübasyon (SBT)." },
+  cardiac:{ story:["akut başlayan ortopne ve köpüklü balgam","hipertansif akciğer ödemi, ani nefes darlığı","STEMI sonrası akut kalp yetmezliği ve pulmoner ödem"],
+    comorb:["iskemik kardiyomiyopati (EF %25)","hipertansiyon, DM","atriyal fibrilasyon","kronik böbrek hastalığı"],
+    intub:["NIV'e rağmen SpO₂ %{sat}, solunum yetmezliği","kardiyojenik şok + hipoksemi"],
+    goal:"PEEP ile ödemi geriletme + oksijenasyon, ard yükü azaltma; diürez/ard-yük tedavisiyle akciğer düzelir." },
+  pneumonia:{ story:["4 gündür ateş, prodüktif öksürük ve plöretik ağrı","toplum kökenli lober pnömoni, hızlı kötüleşme","influenza sonrası bakteriyel pnömoni"],
+    comorb:["DM tip 2","KOAH","immünsüpresyon","aktif sigara"],
+    intub:["yüksek akış O₂'ye rağmen artan solunum işi, SpO₂ %{sat}","sepsis + solunum yetmezliği"],
+    goal:"Akciğer koruyucu ventilasyon, PEEP titrasyonu, sekresyon yönetimi; ağır seyirde prone." },
+  neuro:{ story:["bacaklardan başlayıp yükselen güçsüzlük, giderek yüzeyelleşen solunum","Guillain-Barré, vital kapasite hızla düşmüş","nöromusküler krizde tükenme ve hiperkapni"],
+    comorb:["yakın zamanda geçirilmiş gastroenterit","otonom disfonksiyon","yutma güçlüğü / aspirasyon riski"],
+    intub:["vital kapasite <15 mL/kg, zayıf öksürük ve hiperkapni","pompa yetmezliği (akciğer parankimi normal)"],
+    goal:"Akciğer sağlam — solunum pompasını destekle; güç dönene dek uzun süreli destek, sabırlı weaning (SBT), sekresyon/aspirasyon önlemleri." },
+};
+
+function pbw(sex,h){ const base=sex==="Kadın"?45.5:50; return Math.round((base+0.91*(h-152.4))*10)/10; }
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const rndInt=(a,b)=>Math.round(rnd(a,b));
+const pick=arr=>arr[Math.floor(Math.random()*arr.length)];
+
+/* Rastgele hasta kimliği — her sıfırlamada farklı kişi */
+const NAMES={
+  E:["A. Yılmaz","M. Demir","H. Kaya","B. Çelik","S. Şahin","O. Aydın","K. Arslan","E. Doğan","F. Koç","T. Yıldız","İ. Öztürk","C. Aksoy","R. Yıldırım","V. Özdemir","N. Kılıç"],
+  K:["S. Kaya","E. Aydın","Z. Şahin","A. Yıldız","N. Demir","G. Çelik","L. Arslan","D. Koç","H. Öztürk","M. Aksoy","B. Polat","F. Kurt","P. Erdoğan","Y. Şimşek","R. Taş"]};
+const AGE_RANGE={ards:[32,78],copd:[55,83],asthma:[18,47],normal:[24,72],cardiac:[55,85],pneumonia:[40,82],neuro:[22,66]};
+
+/* Monitör değerleri — "nasıl manipüle edilir" ipuçları */
+const TIPS={
+  "SpO₂":"<b>Oksijenasyon.</b> Hızlı artış: FiO₂↑. Kalıcı: PEEP↑ + rekrütman/prone (şantı azaltır). Fazlaysa FiO₂'yi weanleyin. Hedef %88–95.",
+  "etCO₂":"<b>PaCO₂'yi yansıtır.</b> Yüksekse dakika ventilasyonunu (SS veya Vt) artırın; düşükse azaltın. ARDS'de a-etCO₂ farkı açılır.",
+  "Nabız":"Hipoksemi, hiperkapni, asidoz, hipotansiyon ve ajitasyonla artar. <b>Doğrudan değil</b> — altta yatanı düzeltin (oksijenasyon/sedasyon/volüm).",
+  "Kan bas.":"Yüksek PEEP/ort. hava yolu basıncı venöz dönüşü azaltıp düşürür. <b>Yükseltmek için:</b> sıvı bolüsü/vazopresör; gereksiz PEEP'i azaltın; pnömotoraksı boşaltın.",
+  "PIP":"<b>Tepe basıncı</b> = plato + direnç×akım. Düşürmek için: bronkodilatör, sekresyon aspirasyonu, akım/Vt azalt. Ani yükseliş → tıkaç/pnömotoraks.",
+  "Plato":"<b>Alveol basıncı</b> = Vt/kompliyans + PEEP. Düşürmek için: Vt↓ veya PEEP↓. <30 cmH₂O tutun (barotravma).",
+  "ΔP":"<b>Sürücü basınç</b> = Vt/kompliyans. Düşürmek için: Vt↓; kompliyans düzelince de düşer. <15 cmH₂O hedefleyin (VILI).",
+  "Vte":"<b>Verilen tidal volüm.</b> VC'de doğrudan Vt ayarı; PC/PS'de basınç ve kompliyansa bağlı; kaçak varsa düşer. Hedef 6 mL/kg (TVA).",
+  "Toplam SS":"Zorunlu (ayar) + spontan soluklar. <b>Spontanı azaltmak:</b> sedasyon↑ veya hipoksi/hiperkapni/asidozu düzelt. <b>Zorunluyu:</b> SS ayarı.",
+  "Oto-PEEP":"<b>Hava hapsi.</b> Azaltmak için: SS↓ ve İ:E↓ (ekspiryumu uzat), bronkodilatör, sekresyon temizle. KOAH/astımda kritik.",
+  "Mek. güç":"<b>VILI göstergesi</b> = SS × Vt × basınç işi. Azaltmak için: Vt↓, SS↓, basınç↓. <17 J/dk hedef.",
+  "Kompliyans":"<b>Efektif kompliyans</b> — hastalık + PEEP'e bağlı. <b>Best PEEP'te maksimumdur</b> (U-eğrisi): düşük PEEP'te derekrütman, yüksek PEEP'te overdistansiyon düşürür. Koruyucu ayarlarla temel kompliyans zamanla iyileşir, VILI ile kötüleşir. PEEP'i tarayıp en yüksek kompliyansı arayın.",
+  "Direnç":"<b>Hava yolu direnci.</b> Azaltmak için: bronkodilatör, sekresyon aspirasyonu. Bronkospazm/tıkaçta yükselir.",
+  "Dürtü":"<b>Solunum dürtüsü.</b> Sedasyon↑ azaltır; hipoksi/hiperkapni/asidoz artırır. Paralizi tamamen keser. Yüksek dürtü + kontrollü mod → uyumsuzluk.",
+  "CO₂ üretimi":"<b>Metabolik CO₂ yükü (VCO₂).</b> Ateş, ajitasyon ve solunum kası işi artırır; <b>sedasyon ve paralizi belirgin azaltır</b> → PaCO₂ ve O₂ ihtiyacı düşer. Ağır sıkıntıda kaslar VO₂'nin büyük kısmını tüketir.",
+};
+
+let S,P,disp,running=true,simSec=0,breathClock=0,arrested=false,criticalAcc=0;
+let history=[],lastTs=performance.now(),lastAbg=null,abgPending=0,M=null;
+
+const SEV_LBL=["hafif","hafif-orta","orta","orta-ağır","ağır"];
+const SCEN_KEYS=["ards","copd","asthma","normal","cardiac","pneumonia","neuro"];
+let lastScenKey=null;
+function randomScenarioKey(){ let k; do{ k=pick(SCEN_KEYS); }while(k===lastScenKey && SCEN_KEYS.length>1); lastScenKey=k; return k; }
+function initScenario(key){
+  if(!key) key=randomScenarioKey();            // senaryoyu kullanıcı seçmez — rastgele, ardışık tekrar olmadan
+  const sc=SCENARIOS[key];
+  // --- her seferinde farklı hasta kimliği + durumu (senaryo/hastalık aynı, kişi ve şiddet değişir) ---
+  const sev=Math.random();                       // 0 hafif .. 1 ağır
+  const sex=Math.random()<0.5?"Erkek":"Kadın";
+  const name=pick(sex==="Erkek"?NAMES.E:NAMES.K);
+  const [aLo,aHi]=AGE_RANGE[key]||[30,75], age=rndInt(aLo,aHi);
+  const heightJit=sex==="Erkek"?rndInt(166,187):rndInt(153,173);
+  const C0=Math.round(clamp(lerp(sc.C*1.28, sc.C*0.72, sev)+rnd(-2.5,2.5), sc.Cinjured+4, sc.Crecover-2));
+  const shunt0=clamp(lerp(sc.shunt0*0.72, Math.min(sc.shuntWorst*0.9, sc.shunt0*1.4), sev)+rnd(-0.03,0.03), sc.shuntMin+0.02, sc.shuntWorst-0.04);
+  P={ key, C:C0, R0:Math.round(clamp(sc.R*rnd(0.82,1.28),6,44)), shunt0, vdMult:sc.vdMult*rnd(0.92,1.12),
+      hco3:Math.round(clamp(sc.hco3+rnd(-2,2),14,40)), pbwv:pbw(sex,heightJit), sc, name, sex, age, height:heightJit, sev,
+      optPEEP:clamp(Math.round(sc.optPEEP+rnd(-2,3)),4,18), hb:Math.round(clamp(sc.hb+rnd(-2.5,2),8,16)), vco2:Math.round(sc.vco2*rnd(0.9,1.15)),
+      broncho:(sc.broncho0||0)*rnd(0.75,1.15), secretions:rnd(0,0.22), pneumo:0, pneumoOccurred:false, leak:0, disconnected:false,
+      prone:false, lactate:rnd(0.8,1.2)+sev*rnd(0.4,1.8), recruitTimer:0, agitation:0,
+      muscle:sc.muscle?clamp(sc.muscle*rnd(0.8,1.2),0.15,1):1,   // solunum kası gücü (nöromusküler'de düşük)
+      diuretic:!!sc.diuretic, secretionsProne:!!sc.secretionsProne, vasoDose:0,
+      gPaco2:40, gShunt:0.2, gPao2:90, lastGas:{paco2:40,sao2:0.95,ph:7.4,pao2:90} };
+  // --- her seferinde farklı başlangıç ayarları (çoğu zaman düzeltilmesi gereken) ---
+  const vtkg=rnd(6.4,9.2), sevHi=sev>0.55;
+  S={ mode:pick(["VC","VC","PC"]),
+      fio2:pick(sevHi?[0.6,0.7,0.8,1.0]:[0.4,0.5,0.6,0.7]),
+      peep:rndInt(4,Math.min(12,P.optPEEP+2)),
+      vt:Math.round(vtkg*P.pbwv/10)*10,
+      pinsp:rndInt(13,23), ps:rndInt(8,14),
+      rr:rndInt(12,24), ie:pick(IE_OPTIONS.map(o=>o[1])),
+      trig:rndInt(1,3), sedation:rndInt(1,4), paralysis:false };
+  settleGas();   // fiili gazları başlangıç ayarlarının dengesine getir
+  disp=null; simSec=0; breathClock=0; arrested=false; criticalAcc=0; history=[]; lastAbg=null; abgPending=0;
+  M={ t:0, n:0, spo2ok:0, spo2low:0, hyperox:0, phok:0, dpok:0, platok:0, vtok:0, mpok:0, mapok:0, lungprot:0,
+      hiFio2:0, barotrauma:0, autopeep:0, dyssyncTime:0, hypotension:0, pneumoTime:0, o2exp:0, viliDose:0,
+      mpSum:0, dpSum:0, platSum:0, complications:new Set(),
+      maxDP:0, maxMP:0, maxPlat:0, minSpo2:100, minMap:120, maxLac:0, maxPaco2:0, minPh:7.8,
+      extubReady:false, arrestFlag:false };
+  document.getElementById("pt-name").textContent=`${P.name}, ${P.age}`;
+  document.getElementById("pt-sub").innerHTML=`${P.sex} · ${P.height} cm · <b>TVA ${P.pbwv} kg</b> · <b>${sc.dx} (${SEV_LBL[Math.floor(sev*5)]||"ağır"})</b>`;
+  document.getElementById("sed").value=S.sedation;
+  document.getElementById("paralysis").checked=false;
+  buildCase(); renderCase();
+  buildControls(); buildInterventions(); buildWean(); _weanCache=""; renderPills(); syncSed(); syncModeButtons();
+  document.getElementById("arrest").classList.remove("show");
+  document.getElementById("debrief").classList.remove("show");
+  document.getElementById("abg-grid").className="abg-grid stale";
+  document.getElementById("abg-stamp").textContent="alınmadı";
+  running=true; document.getElementById("pause").textContent="⏸ Duraklat";
+}
+
+/* ==========================================================================
+   FİZYOLOJİ
+   ========================================================================== */
+function physiology(){
+  const g=P.lastGas;
+  const Rt=P.R0*(1+1.7*P.broncho)*(1+1.1*P.secretions);
+  // PEEP'e bağlı kompliyans (best-PEEP U-eğrisi): optimal PEEP'te maksimum; altında derekrütman/atelektazi, üstünde overdistansiyon
+  const dPeep=S.peep-P.optPEEP;
+  const recFac=clamp(dPeep<=0 ? 1-0.5*Math.min(1,-dPeep/Math.max(P.optPEEP,4)) : 1-0.045*dPeep, 0.45, 1);
+  const Ceff=P.C*recFac*(1-0.55*P.pneumo);
+  const tau=Rt*(Ceff/1000);
+  const disc=P.disconnected;
+
+  // --- solunum dürtüsü ---
+  const sedDepr=(S.sedation/10)*1.7;                                 // sedasyon dürtüyü belirgin baskılar
+  let driveT=1 + 0.05*(g.paco2-40) + 1.4*Math.max(0,0.90-g.sao2) + 1.0*Math.max(0,7.35-g.ph)*5 - sedDepr + P.agitation;
+  const drive=clamp(driveT,0,3.2);
+  const canSpont=!S.paralysis && drive>0.35 && !disc;
+  const fspont=canSpont?clamp(Math.round(8+18*(drive-0.6)),5,48):0;
+  const pmus=canSpont?clamp((3+13*(drive-0.8))*P.muscle,0,26):0;     // kas gücü ile ölçekli (nöromusküler'de zayıf)
+  // --- metabolik hız: solunum kası işi (WOB) + ajitasyon artırır; sedasyon ve paralizi azaltır ---
+  const wob=canSpont?clamp((drive-1)*0.34+pmus*0.011,0,0.55):0;      // solunum işi — ağır sıkıntıda VO2/VCO2'yi belirgin artırır
+  let metab=1+wob+0.12*P.agitation-0.028*S.sedation;
+  if(S.paralysis) metab*=0.82;                                       // kas işi tamamen kalkar → metabolizma düşer
+  metab=clamp(metab,0.55,1.75);
+  const VCO2=P.vco2*metab, VO2=VCO2*1.15;
+
+  // --- moda göre soluk dağılımı ---
+  const Ttot=60/Math.max(S.rr,fspont||S.rr), fracI=S.ie/(1+S.ie);
+  const Ti=(60/S.rr)*fracI;
+  const eterm=1-Math.exp(-Ti/tau);
+  const vtLeak=v=>v*(1-0.55*P.leak);
+  let mandRR=0,spontRR=0,vtMand=0,vtSpont=0,apnea=false,dispMode=S.mode,dispVt=0,dispPinsp=0;
+  const backupVt=vtLeak(16*Ceff*eterm);
+
+  if(S.mode==="VC"){ mandRR=S.rr; vtMand=vtLeak(S.vt); if(canSpont&&fspont>mandRR)mandRR=fspont; dispVt=vtMand; }
+  else if(S.mode==="PC"){ const passist=S.pinsp+(canSpont?0.35*pmus:0); vtMand=vtLeak(passist*Ceff*eterm); mandRR=S.rr; if(canSpont&&fspont>mandRR)mandRR=fspont; dispVt=vtMand; dispPinsp=S.pinsp; }
+  else if(S.mode==="PS"){ if(canSpont){ spontRR=fspont; vtSpont=vtLeak((S.ps+pmus)*Ceff*eterm); dispVt=vtSpont; dispPinsp=S.ps; } else { apnea=true; mandRR=12; vtMand=backupVt; dispMode="PC"; dispVt=vtMand; dispPinsp=15; } }
+  else if(S.mode==="SIMV"){ mandRR=S.rr; vtMand=vtLeak(S.vt); if(canSpont&&fspont>S.rr){ spontRR=fspont-S.rr; vtSpont=vtLeak((S.ps+pmus)*Ceff*eterm);} dispVt=vtMand; }
+  else if(S.mode==="CPAP"){ if(canSpont){ spontRR=fspont; vtSpont=vtLeak(pmus*Ceff*eterm); dispMode="PS"; dispVt=vtSpont; dispPinsp=0; } else { apnea=true; mandRR=12; vtMand=backupVt; dispMode="PC"; dispVt=vtMand; dispPinsp=15; } }
+
+  const effRR=Math.max(1,mandRR+spontRR);
+  const avgVt=(mandRR*vtMand+spontRR*vtSpont)/effRR;
+  const minVent=disc?0.2:(mandRR*vtMand+spontRR*vtSpont)/1000;
+  const flowLps=(dispVt/1000)/Math.max(Ti,0.2);
+
+  // --- basınçlar ---
+  const Te=(60/effRR)-Ti;
+  const trap=Math.exp(-Math.max(Te,0.05)/tau);
+  const autoPEEP=clamp((avgVt/Ceff)*trap*0.9,0,30);
+  const peepEff=disc?0:S.peep;
+  const totalPEEP=peepEff+autoPEEP;
+  // non-lineer P-V: üst bükülme noktası — yüksek end-inspiratuvar hacimde eğri dikleşir (overdistansiyon → ΔP orantısızca artar)
+  const dpLin=avgVt/Ceff;
+  const drivingP=dpLin*(1+0.02*Math.max(0,(totalPEEP+dpLin)-27));
+  let plateau=totalPEEP+drivingP+8*P.pneumo;
+  let pip;
+  if(dispMode==="VC") pip=plateau+Rt*flowLps;
+  else pip=totalPEEP+ (dispPinsp||drivingP) +8*P.pneumo;
+  if(canSpont&&pmus>0) pip-=Math.min(4,pmus*0.15); // hasta çekişi PIP'i düşürür (assist)
+  const meanPaw=totalPEEP + fracI*(dispMode==="VC"?(Rt*flowLps+0.5*drivingP):(dispPinsp||drivingP)) + (1-fracI)*0.32*drivingP;
+
+  // --- ventilasyon / CO2 (hedef + gecikmeli fiili değer) ---
+  let vd=2.2*P.pbwv*P.vdMult*(1+0.4*P.pneumo);
+  vd*=1+0.16*Math.max(0,totalPEEP-P.optPEEP-3);            // aşırı distansiyon → ölü boşluk↑ (West zon 1)
+  const alvVent=disc?0.2:Math.max(0.2,effRR*Math.max(0,avgVt-vd)/1000);
+  const paco2Target=clamp((VCO2*0.863)/alvVent,12,190);
+  const paco2=P.gPaco2;                                     // fiili — CO2 depoları nedeniyle gecikmeli oturur
+  const hco3eff=clamp(P.hco3-Math.max(0,P.lactate-1.2)*0.9,5,44); // laktik asit bikarbonatı tüketir → metabolik asidoz
+  const ph=clamp(6.1+Math.log10(hco3eff/(0.03*paco2)),6.55,7.75);
+  const etco2=clamp(paco2-(3+22*(vd/Math.max(avgVt,vd+50))),6,paco2);
+
+  // --- şant / oksijenasyon (hedef + rekrütman kinetiği) ---
+  let baseShunt=P.shunt0*(P.prone?0.62:1)+0.22*P.pneumo+0.05*P.secretions;
+  baseShunt=clamp(baseShunt,0.02,0.9);
+  const recruit=baseShunt-P.sc.shuntMin, ratio=totalPEEP/P.optPEEP;
+  let shuntTarget; if(ratio<=1) shuntTarget=baseShunt-recruit*ratio; else shuntTarget=P.sc.shuntMin+recruit*0.35*(ratio-1);
+  shuntTarget=clamp(shuntTarget,0.02,0.9);
+  const shunt=P.gShunt;                                     // fiili — açılma yavaş, kollaps hızlı (histerezis)
+
+  const fio2Eff=disc?0.21:S.fio2;
+  const acidF=clamp(1-0.55*Math.max(0,7.2-ph)-0.25*Math.max(0,ph-7.55),0.5,1);
+  let venF=clamp(1-0.024*Math.max(0,totalPEEP-10)-0.014*Math.max(0,meanPaw-15),0.42,1);
+  venF*=(1-0.7*P.pneumo); // tansiyon pnömotoraks → obstrüktif şok
+  if(P.recruitTimer>0) venF*=0.7;
+  const PAO2=fio2Eff*713 - paco2/0.8;
+  const PcO2=Math.min(PAO2,650), ScO2=so2FromPao2(PcO2), CcO2=1.34*P.hb*ScO2+0.003*PcO2;
+  let COs=5.0,sao2Inst=0.95,pao2Inst=90;
+  for(let i=0;i<4;i++){
+    const avDO2=clamp(VO2/(COs*10),1.5,12);
+    let CaO2=clamp(CcO2-(shunt/(1-shunt))*avDO2,1,CcO2);
+    pao2Inst=pao2FromContent(CaO2,P.hb); sao2Inst=so2FromPao2(pao2Inst);
+    const hypoxF=clamp(1-1.1*Math.max(0,0.80-sao2Inst),0.45,1);
+    COs=clamp(5.2*venF*acidF*hypoxF,1.4,7);
+  }
+  // fiili oksijenasyon — O2 depoları nedeniyle PaO2 gecikmeli oturur
+  const pao2=P.gPao2, sao2=so2FromPao2(pao2);
+  const spo2=clamp(sao2*100,25,100), pfRatio=pao2/Math.max(fio2Eff,0.21);
+  const actHypoxF=clamp(1-1.1*Math.max(0,0.80-sao2),0.45,1);
+  const CO=clamp(5.2*venF*acidF*actHypoxF,1.4,7);
+
+  let hr=72+42*Math.max(0,0.92-sao2)+0.28*Math.max(0,paco2-45)+26*Math.max(0,0.9-CO/5)-8*Math.max(0,ph-7.5)+18*P.agitation;
+  if(spo2<58) hr=lerp(hr,42,clamp((58-spo2)/18,0,1));
+  hr=clamp(hr,32,180);
+  const sedHemo=1-0.011*Math.max(0,S.sedation-3);          // derin sedasyon (propofol/opioid) → vazodilatasyon/hipotansiyon
+  const map=clamp((58*(CO/5)+27*acidF)*sedHemo + (P.vasoDose||0)*72, 26, 130);   // vazopresör OAB'yi doza bağlı yükseltir
+  const sys=Math.round(map+map*0.42), dia=Math.round(map-map*0.18);
+
+  const rsbi=(spontRR>0&&avgVt>0)?spontRR/(avgVt/1000):null;
+  const mechPower=0.098*minVent*(pip-0.5*drivingP);
+  const dyssync=(!S.paralysis && (S.mode==="VC"||S.mode==="PC"||S.mode==="SIMV") && pmus>9 && S.sedation<4) ? clamp((pmus-9)/12,0,1):0;
+
+  return {Ttot,Ti,Te,fracI,tau:tau,vt:avgVt,dispVt,dispMode,dispPinsp,pmus,plateau,pip,drivingP,autoPEEP,totalPEEP,meanPaw,
+    flowLps,minVent,alvVent,paco2,paco2Target,ph,hco3:hco3eff,etco2,shunt,shuntTarget,pao2,pao2Inst,spo2,pfRatio,hr,map,sys,dia,CO,
+    drive,fspont,effRR,mandRR,spontRR,rsbi,mechPower,dyssync,apnea,disc,Rt,Ceff,vd,canSpont,metab,VCO2};
+}
+
+/* --- gaz kinetiği: fiili gazlar hedeflerine zaman sabitleriyle oturur --- */
+function integrateGas(dtMin, ph){
+  dtMin=clamp(dtMin,0,30);                                     // negatif/aşırı adım koruması
+  const app=(cur,tgt,tau)=>cur+(tgt-cur)*(1-Math.exp(-dtMin/Math.max(tau,0.05)));
+  P.gPaco2=clamp(app(P.gPaco2, ph.paco2Target, 4.0),8,200);   // CO2 depoları büyük → yavaş
+  const tauSh=ph.shuntTarget<P.gShunt ? 3.0 : 0.6;            // açılma yavaş, kollaps hızlı (histerezis)
+  P.gShunt=clamp(app(P.gShunt, ph.shuntTarget, tauSh),0.01,0.95);
+  P.gPao2=clamp(app(P.gPao2, ph.pao2Inst, 0.6),12,700);       // O2 depoları → orta hız
+  P.lastGas={paco2:P.gPaco2, sao2:so2FromPao2(P.gPao2), ph:ph.ph, pao2:P.gPao2};
+}
+function settleGas(){                                           // hastayı gerçek denge durumunda başlat
+  P.gPaco2=40; P.gShunt=P.shunt0*0.6; P.gPao2=90;
+  for(let i=0;i<70;i++){ integrateGas(6, physiology()); }
+}
+
+/* ==========================================================================
+   EVRİM
+   ========================================================================== */
+function evolve(dtH, ph){
+  const sc=P.sc, vtkg=ph.vt/P.pbwv;
+  let harm=0;
+  harm+=1.6*Math.max(0,ph.drivingP-15);
+  harm+=1.2*Math.max(0,ph.plateau-30);
+  harm+=1.0*Math.max(0,vtkg-8);
+  harm+=0.5*Math.max(0,(S.fio2-0.6))*10;
+  harm+=0.9*Math.max(0,ph.autoPEEP-6);
+  harm+=2.2*Math.max(0,0.85-ph.spo2/100)*10;
+  harm+=1.4*Math.max(0,7.2-ph.ph)*10 + 0.8*Math.max(0,ph.ph-7.55)*10;
+  harm+=0.8*Math.max(0,ph.mechPower-18);
+  harm+=0.7*Math.max(0,ph.pmus-14);        // P-SILI: paralize olmayan güçlü çaba → yüksek transpulmoner basınç, akciğer hasarı
+  harm+=1.1*ph.dyssync;                     // hasta-ventilatör uyumsuzluğu akciğeri yıpratır (paralizi/sedasyon keser)
+  const protective=ph.drivingP<15&&ph.plateau<30&&vtkg<8&&S.fio2<=0.6&&ph.spo2>=88&&ph.ph>=7.25&&ph.ph<=7.50&&ph.autoPEEP<6&&ph.pmus<15;
+  let heal=protective?1:(harm<1.9?0.35:0);
+
+  const Cdrive=heal>0?(sc.Crecover-P.C)*heal:-(P.C-sc.Cinjured)*(harm*0.016);
+  P.C=clamp(P.C+Cdrive*dtH*1.5,sc.Cinjured,sc.Crecover);
+  const sDrive=heal>0?-(P.shunt0-sc.shuntMin)*heal:(sc.shuntWorst-P.shunt0)*(harm*0.016);
+  P.shunt0=clamp(P.shunt0+sDrive*dtH*1.5,sc.shuntMin,sc.shuntWorst);
+  if(P.prone&&sc.proneResp) P.shunt0=clamp(P.shunt0-(P.shunt0-sc.shuntMin)*0.4*dtH,sc.shuntMin,sc.shuntWorst);
+
+  // HCO3 kompanzasyon
+  let hco3t = ph.paco2>45?24+0.4*(ph.paco2-40):ph.paco2<35?24-0.5*(40-ph.paco2):24;
+  if(sc.chronicCO2) hco3t=Math.max(hco3t,30);
+  P.hco3=clamp(P.hco3+(hco3t-P.hco3)*dtH*0.6,12,42);
+
+  // laktat (perfüzyon/oksijenasyon)
+  const lacUp=Math.max(0,0.88-ph.spo2/100)*10+Math.max(0,65-ph.map)/20;
+  const lacDn=(ph.spo2>92&&ph.map>65)?0.6:0.1;
+  P.lactate=clamp(P.lactate+(lacUp-lacDn)*dtH*2.2,0.6,14);
+
+  // sekresyon yavaş birikir (temizlenmezse; nöromusküler/pnömonide daha hızlı — zayıf öksürük/enfeksiyon)
+  if(!P.disconnected) P.secretions=clamp(P.secretions+(P.secretionsProne?0.045:0.015)*dtH,0,1);
+  // ajitasyon söner
+  P.agitation=Math.max(0,P.agitation-dtH*1.5);
+  if(P.recruitTimer>0) P.recruitTimer=Math.max(0,P.recruitTimer-dtH*3600);
+
+  // otomatik komplikasyonlar (klinik + iyatrojenik)
+  autoComplications(dtH, ph, vtkg);
+
+  // debrief metrikleri (zaman-içi-hedef + maruziyet + ekstremler)
+  M.t+=dtH; const sec=dtH*3600, permLo=P.key!=="normal"?7.25:7.30;
+  if(ph.spo2>=88&&ph.spo2<=96) M.spo2ok+=sec;
+  if(ph.spo2<88) M.spo2low+=sec;
+  if(ph.spo2>97&&S.fio2>0.5) M.hyperox+=sec;
+  if(ph.ph>=permLo&&ph.ph<=7.45) M.phok+=sec;
+  if(ph.drivingP<15) M.dpok+=sec;
+  if(ph.plateau<30) M.platok+=sec; else M.barotrauma+=sec;
+  if(vtkg<=8) M.vtok+=sec;
+  if(ph.mechPower<17) M.mpok+=sec;
+  if(ph.map>=65) M.mapok+=sec; else M.hypotension+=sec;
+  if(ph.drivingP<15&&ph.plateau<30&&vtkg<=8) M.lungprot+=sec;
+  if(S.fio2>0.6){ M.hiFio2+=sec; M.o2exp+=(S.fio2-0.6)*sec/60; }
+  if(ph.autoPEEP>5) M.autopeep+=sec;
+  if(ph.dyssync>0.3) M.dyssyncTime+=sec;
+  if(P.pneumo>0) M.pneumoTime+=sec;
+  M.viliDose+=Math.max(0,ph.drivingP-15)*sec/60;
+  M.mpSum+=ph.mechPower*sec; M.dpSum+=ph.drivingP*sec; M.platSum+=ph.plateau*sec; M.n+=sec;
+  M.maxDP=Math.max(M.maxDP,ph.drivingP); M.maxMP=Math.max(M.maxMP,ph.mechPower); M.maxPlat=Math.max(M.maxPlat,ph.plateau);
+  M.minSpo2=Math.min(M.minSpo2,ph.spo2); M.minMap=Math.min(M.minMap,ph.map); M.maxLac=Math.max(M.maxLac,P.lactate);
+  M.maxPaco2=Math.max(M.maxPaco2,ph.paco2); M.minPh=Math.min(M.minPh,ph.ph);
+  M.extubReady=(ph.rsbi!==null&&ph.rsbi<105&&ph.spo2>=90&&ph.ph>=7.32&&S.fio2<=0.45&&S.peep<=8&&ph.pfRatio>200);
+
+  const lethal=ph.spo2<52||ph.ph<6.9||ph.map<38;
+  criticalAcc=lethal?criticalAcc+dtH*60:Math.max(0,criticalAcc-dtH*40);
+  if(criticalAcc>3.2&&!arrested) triggerArrest(ph);
+}
+
+function conditionIndex(ph){
+  const ox=clamp((ph.pfRatio-60)/240,0,1);
+  const comp=clamp((P.C-P.sc.Cinjured)/(P.sc.Crecover-P.sc.Cinjured),0,1);
+  const acidOk=clamp(1-Math.abs(7.4-ph.ph)/0.5,0,1);
+  const hemo=clamp((ph.map-45)/40,0,1);
+  const prot=clamp(1-Math.max(0,ph.drivingP-15)/12,0,1);
+  return Math.round(100*(0.32*ox+0.22*comp+0.18*acidOk+0.12*hemo+0.09*prot+0.07*clamp(1-ph.dyssync,0,1)));
+}
+
+/* ==========================================================================
+   KONTROLLER
+   ========================================================================== */
+function ctrlDef(){
+  const m=S.mode;
+  const all={
+    fio2:{n:"FiO₂",min:21,max:100,step:1,get:()=>Math.round(S.fio2*100),set:v=>S.fio2=v/100,unit:"%",sub:()=>""},
+    peep:{n:"PEEP",min:0,max:22,step:1,get:()=>S.peep,set:v=>S.peep=v,unit:"cmH₂O",sub:()=>""},
+    vt:{n:"Tidal volüm (Vt)",min:200,max:800,step:10,get:()=>S.vt,set:v=>S.vt=v,unit:"mL",sub:()=>`${(S.vt/P.pbwv).toFixed(1)} mL/kg`},
+    pinsp:{n:"İnsp. basınç (ΔP)",min:5,max:40,step:1,get:()=>S.pinsp,set:v=>S.pinsp=v,unit:"cmH₂O",sub:()=>"PEEP üzeri"},
+    ps:{n:"Basınç desteği",min:0,max:30,step:1,get:()=>S.ps,set:v=>S.ps=v,unit:"cmH₂O",sub:()=>"PEEP üzeri"},
+    rr:{n:m==="SIMV"?"Zorunlu solunum (SIMV)":"Solunum sayısı",min:5,max:40,step:1,get:()=>S.rr,set:v=>S.rr=v,unit:"/dk",sub:()=>""},
+    trig:{n:"Tetik hassasiyeti",min:1,max:6,step:1,get:()=>S.trig,set:v=>S.trig=v,unit:"L/dk",sub:()=>S.trig<=2?"hassas":S.trig>=5?"künt":""},
+  };
+  const map={ VC:["fio2","peep","vt","rr","trig"], PC:["fio2","peep","pinsp","rr","trig"],
+    PS:["fio2","peep","ps","trig"], SIMV:["fio2","peep","vt","rr","ps","trig"], CPAP:["fio2","peep","trig"] };
+  return {list:map[m].map(k=>all[k]), ie:(m==="VC"||m==="PC"||m==="SIMV")};
+}
+function buildControls(){
+  const box=document.getElementById("ctrls"); box.innerHTML="";
+  const {list,ie}=ctrlDef();
+  list.forEach(d=>{
+    const w=document.createElement("div"); w.className="ctrl";
+    w.innerHTML=`<div class="top"><span class="cn">${d.n}</span><span class="cv"><span data-v></span> <small>${d.unit}</small><small data-sub></small></span></div><input type="range" min="${d.min}" max="${d.max}" step="${d.step}">`;
+    const r=w.querySelector("input"),vv=w.querySelector("[data-v]"),sub=w.querySelector("[data-sub]");
+    const sync=()=>{vv.textContent=d.get();const s=d.sub();sub.textContent=s?" · "+s:"";r.style.setProperty("--pct",((d.get()-d.min)/(d.max-d.min)*100)+"%");};
+    r.value=d.get(); sync(); r.addEventListener("input",()=>{d.set(parseFloat(r.value));sync();});
+    box.appendChild(w);
+  });
+  if(ie){
+    const w=document.createElement("div"); w.className="field"; w.style.marginTop="2px";
+    w.innerHTML=`<label>İ:E oranı <span style="color:var(--faint)">(ekspiryum süresi)</span></label><select></select>`;
+    const sel=w.querySelector("select");
+    IE_OPTIONS.forEach(([lab,val])=>{const o=document.createElement("option");o.value=val;o.textContent=lab;if(Math.abs(val-S.ie)<0.01)o.selected=true;sel.appendChild(o);});
+    sel.addEventListener("change",()=>S.ie=parseFloat(sel.value)); box.appendChild(w);
+  }
+  document.getElementById("mode-tag").textContent={VC:"VC-AC",PC:"PC-AC",PS:"PS/Spontan",SIMV:"SIMV+PS",CPAP:"CPAP/SBT"}[S.mode];
+  document.getElementById("mon-tag").textContent=(S.mode==="CPAP"||S.mode==="PS")?"spontan":"sürekli";
+}
+
+/* interventions */
+function buildInterventions(){
+  const box=document.getElementById("interventions"); box.innerHTML="";
+  const acts=[
+    {id:"prone",t:"Prone pozisyon",s:"ARDS'de şantı azaltır",toggle:()=>P.prone},
+    {id:"broncho",t:"Bronkodilatör",s:"Direnci / bronkospazmı azaltır"},
+    {id:"suction",t:"Aspirasyon",s:"Sekresyonu temizler (geçici desat)"},
+    {id:"fluid",t:"Sıvı bolüsü",s:"Ön yükü ve TA'yı artırır"},
+    {id:"chesttube",t:"Göğüs tüpü",s:"Pnömotoraksı boşaltır"},
+  ];
+  acts.forEach(a=>{
+    const b=document.createElement("button"); b.className="abtn"; b.dataset.id=a.id;
+    b.innerHTML=`${a.t}<small>${a.s}</small>`;
+    b.addEventListener("click",()=>doIntervention(a.id));
+    box.appendChild(b);
+  });
+  refreshInterventionStates();
+  buildVaso();
+}
+/* vazopresör — doz seçilerek başlanır (sürekli infüzyon) */
+const VASO_DOSES=[0,0.05,0.1,0.2,0.3,0.5];
+function buildVaso(){
+  const box=document.getElementById("vaso"); if(!box) return; box.innerHTML="";
+  box.innerHTML=`<label>Vazopresör — noradrenalin <span style="color:var(--faint)">(µg/kg/dk)</span></label>
+    <div class="seg" id="vaso-seg" role="group" aria-label="Vazopresör dozu"></div>`;
+  const seg=box.querySelector("#vaso-seg");
+  VASO_DOSES.forEach(d=>{ const b=document.createElement("button"); b.textContent=d===0?"Kapalı":d.toFixed(2);
+    b.setAttribute("aria-pressed", (P.vasoDose||0)===d);
+    b.addEventListener("click",()=>{ P.vasoDose=d; [...seg.children].forEach(x=>x.setAttribute("aria-pressed",x===b));
+      flash(d===0?"Vazopresör kapatıldı":`Noradrenalin ${d.toFixed(2)} µg/kg/dk`); renderPills(); });
+    seg.appendChild(b); });
+}
+
+/* --- weaning / SBT --- */
+function buildWean(){
+  const box=document.getElementById("wean"); if(!box) return;
+  box.innerHTML=`<div class="row" style="padding:11px 14px 2px">
+      <button class="btn" id="sbt-btn">▶ SBT başlat (CPAP/PS)</button>
+      <button class="btn primary" id="extub-btn">Ekstübe et</button></div>
+    <p class="hint" style="padding:2px 14px 4px">Spontan solunum denemesi: düşük destek (CPAP) + hafif sedasyona geç, kriterleri izle.</p>
+    <div id="wean-crit" style="padding:4px 14px 12px"></div>`;
+  document.getElementById("sbt-btn").addEventListener("click",()=>{
+    S.mode="CPAP"; S.peep=Math.min(S.peep,5); S.ps=6; S.paralysis=false;
+    document.getElementById("sed").value=Math.min(S.sedation,1);   // slider'ı da düşür (syncSed bunu okur)
+    buildControls(); syncModeButtons(); document.getElementById("paralysis").checked=false; syncSed();
+    flash("SBT başlatıldı — CPAP, hafif sedasyon; kriterleri izleyin");
+  });
+  document.getElementById("extub-btn").addEventListener("click",()=>{
+    const ph=physiology(), c=weanCriteria(ph);
+    if(c.every(x=>x.ok)){ arrested=false; running=false; document.getElementById("pause").textContent="▶ Devam";
+      flash("✓ Başarılı ekstübasyon — hasta stabil"); setTimeout(openDebrief,300); }
+    else { flash("✗ Ekstübasyon kriterleri karşılanmıyor — reentübasyon riski yüksek"); }
+  });
+}
+function weanCriteria(ph){
+  return [
+    {t:"Spontan solunum çabası var", ok: ph.spontRR>0 || (ph.canSpont && ph.drive>0.6)},
+    {t:`RSBI < 105 (${ph.rsbi!==null?Math.round(ph.rsbi):"—"})`, ok: ph.rsbi!==null && ph.rsbi<105},
+    {t:"SpO₂ ≥ 90 · FiO₂ ≤ %40 · PEEP ≤ 8", ok: ph.spo2>=90 && S.fio2<=0.4 && S.peep<=8},
+    {t:"pH ≥ 7.32", ok: ph.ph>=7.32},
+    {t:"Hemodinamik stabil (OAB ≥ 65, vazopresör düşük)", ok: ph.map>=65 && (P.vasoDose||0)<=0.05},
+  ];
+}
+let _weanCache="";
+function renderWean(ph){
+  const box=document.getElementById("wean-crit"); if(!box) return;
+  const c=weanCriteria(ph), ready=c.every(x=>x.ok);
+  const html=c.map(x=>`<div class="wcrit ${x.ok?'ok':'no'}"><span class="wci">${x.ok?'✓':'✗'}</span>${x.t}</div>`).join("")
+    +`<div class="wcrit ${ready?'ok':'no'}" style="margin-top:6px;font-weight:600"><span class="wci">${ready?'✓':'✗'}</span>${ready?'Ekstübasyona hazır':'Henüz hazır değil'}</div>`;
+  if(html!==_weanCache){ box.innerHTML=html; _weanCache=html;
+    const tag=document.getElementById("wean-tag"); if(tag){tag.textContent=ready?"hazır ✓":"değerlendirme"; tag.style.color=ready?"var(--good)":"";} }
+}
+function refreshInterventionStates(){
+  document.querySelectorAll("#interventions .abtn").forEach(b=>{
+    if(b.dataset.id==="prone") b.classList.toggle("on",P.prone);
+    if(b.dataset.id==="chesttube") b.disabled=P.pneumo<=0.01;
+    if(b.dataset.id==="broncho") b.disabled=P.broncho<=0.01;
+    if(b.dataset.id==="suction") b.disabled=P.secretions<=0.02;
+  });
+}
+let suctionTimer=0;
+function doIntervention(id){
+  switch(id){
+    case "prone": P.prone=!P.prone; flash(P.prone?"Hasta prone çevrildi":"Hasta supine çevrildi"); break;
+    case "broncho": P.broncho=clamp(P.broncho-0.5,0,1); flash("Bronkodilatör verildi"); break;
+    case "suction": P.secretions=clamp(P.secretions-0.8,0,1); suctionTimer=3; flash("Aspire edildi (geçici desatürasyon)"); break;
+    case "fluid": P.lactate=clamp(P.lactate-0.5,0.6,14); flash("Sıvı bolüsü — ön yük arttı"); bpBoost=6; break;
+    case "chesttube": P.pneumo=0; flash("Göğüs tüpü — pnömotoraks boşaltıldı"); break;
+  }
+  refreshInterventionStates(); renderPills();
+}
+let bpBoost=0;
+
+/* --- otomatik komplikasyonlar (klinik seyir + iyatrojenik) --- */
+function autoComplications(dtH, ph, vtkg){
+  const roll=r=>Math.random()<clamp(r,0,25)*dtH;   // r ≈ olay/sim-saat
+  // İYATROJENİK: barotravma → pnömotoraks (yüksek plato / oto-PEEP / Vt / PIP) — oturum başına en fazla bir kez
+  if(P.pneumo<=0 && !P.pneumoOccurred){
+    const r=0.7*Math.max(0,ph.plateau-33)+1.0*Math.max(0,ph.autoPEEP-12)+0.5*Math.max(0,vtkg-9)+0.35*Math.max(0,ph.pip-42);
+    if(roll(r)){ P.pneumo=rnd(0.5,0.8); P.pneumoOccurred=true; M.complications.add("Pnömotoraks (barotravma)"); flash("⚠ Barotravma → pnömotoraks"); }
+  }
+  // KLİNİK: bronkospazm atağı (astım/KOAH; ajitasyon tetikler) — tedaviyle düşünce nüksedebilir
+  const bTend=P.key==="asthma"?1.1:P.key==="copd"?0.45:0.04;
+  if(P.broncho<0.35 && roll(bTend*(0.5+0.9*P.agitation))){ P.broncho=clamp(P.broncho+rnd(0.4,0.7),0,1); M.complications.add("Bronkospazm"); flash("⚠ Bronkospazm atağı"); }
+  // KLİNİK: sekresyon tıkacı (birikim yüksek + aspire edilmediyse)
+  if(P.secretions>0.55 && roll(0.9)){ P.secretions=clamp(P.secretions+0.2,0,1); M.complications.add("Sekresyon tıkacı"); flash("⚠ Sekresyon tıkacı"); }
+  // İYATROJENİK: az sedasyon + yüksek dürtü → ajitasyon/uyumsuzluk
+  if(!S.paralysis && P.agitation<0.2 && S.sedation<2 && ph.drive>1.6 && roll(1.0)){ P.agitation=rnd(0.8,1.3); M.complications.add("Ajitasyon"); flash("⚠ Hasta ajite / uyumsuz"); }
+  refreshInterventionStates(); renderPills();
+}
+
+let flashMsg="",flashTimer=0;
+function flash(m){ flashMsg=m; flashTimer=3.2; }
+
+function renderPills(){
+  const box=document.getElementById("pt-pills"); const p=[];
+  p.push(`<span class="pill ${P.prone?'on':''}">${P.prone?'Prone':'Supine'}</span>`);
+  if(S.paralysis) p.push(`<span class="pill on">Paralize</span>`);
+  const sedTxt=RASS[S.sedation]||"";
+  p.push(`<span class="pill">RASS ${sedTxt.split(" ")[0]}</span>`);
+  if(P.pneumo>0) p.push(`<span class="pill bad">Pnömotoraks</span>`);
+  if(P.broncho>0.3) p.push(`<span class="pill bad">Bronkospazm</span>`);
+  if(P.secretions>0.4) p.push(`<span class="pill bad">Sekresyon</span>`);
+  if(P.leak>0) p.push(`<span class="pill bad">Kaçak</span>`);
+  if(P.disconnected) p.push(`<span class="pill bad">Bağlantı yok</span>`);
+  if(P.lactate>2.5) p.push(`<span class="pill bad">Laktat ${P.lactate.toFixed(1)}</span>`);
+  if(P.vasoDose>0) p.push(`<span class="pill on">Noradr. ${P.vasoDose.toFixed(2)}</span>`);
+  box.innerHTML=p.join("");
+}
+
+/* events / mode / sedation listeners */
+document.getElementById("seg-mode").addEventListener("click",e=>{
+  const b=e.target.closest("button"); if(!b)return; S.mode=b.dataset.mode;
+  [...e.currentTarget.children].forEach(x=>x.setAttribute("aria-pressed",x===b)); buildControls();
+});
+function syncModeButtons(){ document.querySelectorAll("#seg-mode button").forEach(x=>x.setAttribute("aria-pressed",x.dataset.mode===S.mode)); }
+const sedEl=document.getElementById("sed");
+function syncSed(){ S.sedation=parseInt(sedEl.value); document.getElementById("sed-v").textContent=S.sedation; const r=RASS[S.sedation]||"";
+  document.getElementById("sed-lbl").textContent=r.split(" ").slice(1).join(" ")||r; document.getElementById("rass-tag").textContent="RASS "+(r.split(" ")[0]||"0");
+  sedEl.style.setProperty("--pct",(S.sedation/10*100)+"%"); renderPills(); }
+sedEl.addEventListener("input",syncSed);
+document.getElementById("paralysis").addEventListener("change",e=>{ S.paralysis=e.target.checked; renderPills(); });
+document.getElementById("pause").addEventListener("click",e=>{ running=!running; e.target.textContent=running?"⏸ Duraklat":"▶ Devam"; lastTs=performance.now(); });
+document.getElementById("snd-btn").addEventListener("click",e=>{ const on=Snd.toggle(); e.currentTarget.setAttribute("aria-pressed",on); e.currentTarget.textContent=on?"🔔 Alarm açık":"🔕 Alarm"; alarmAcc=999; lastAlarmLevel=0; });
+document.getElementById("reset").addEventListener("click",()=>{ initScenario(); syncModeButtons(); renderTargets(); });
+
+/* ABG (gecikmeli) */
+document.getElementById("abg-btn").addEventListener("click",()=>{ if(abgPending>0)return; abgPending=3.0;
+  document.getElementById("abg-btn").disabled=true; document.getElementById("abg-stamp").textContent="işleniyor…"; document.getElementById("abg-grid").className="abg-grid stale"; });
+function commitAbg(){
+  const ph=physiology(); const be=ph.hco3-24.5;
+  lastAbg={ph:ph.ph,pao2:ph.pao2,paco2:ph.paco2,hco3:ph.hco3,sao2:ph.spo2,pf:ph.pfRatio,lac:P.lactate,be,t:formatClock(simSec)};
+  renderAbg(); document.getElementById("abg-btn").disabled=false;
+}
+function renderAbg(){
+  const grid=document.getElementById("abg-grid"),stamp=document.getElementById("abg-stamp");
+  if(!lastAbg){grid.className="abg-grid stale";return;} grid.className="abg-grid"; stamp.textContent=lastAbg.t;
+  const a=lastAbg;
+  const cells=[
+    ["pH",a.ph.toFixed(2),a.ph<7.25?"crit":a.ph<7.35?"lo":a.ph>7.45?"hi":"ok"],
+    ["PaCO₂",Math.round(a.paco2),a.paco2>50?"hi":a.paco2<32?"lo":"ok"],
+    ["PaO₂",Math.round(a.pao2),a.pao2<55?"crit":a.pao2<80?"lo":a.pao2>120?"hi":"ok"],
+    ["HCO₃⁻",a.hco3.toFixed(0),a.hco3<20?"lo":a.hco3>28?"hi":"ok"],
+    ["Baz açığı",(a.be>=0?"+":"")+a.be.toFixed(0),a.be<-6?"crit":a.be<-2?"lo":a.be>4?"hi":"ok"],
+    ["Laktat",a.lac.toFixed(1),a.lac>4?"crit":a.lac>2?"hi":"ok"],
+    ["P/F",Math.round(a.pf),a.pf<100?"crit":a.pf<200?"lo":a.pf<300?"hi":"ok"],
+  ];
+  grid.innerHTML=cells.map(([k,v,c])=>`<div class="acell"><div class="ak">${k}</div><div class="av ${c}">${v}</div></div>`).join("");
+}
+
+/* --- randomize vaka sunumu --- */
+function buildCase(){
+  const key=P.key, cd=CASE_DATA[key], sev=P.sev;
+  const day=rndInt(1,4), story=pick(cd.story), comorb=pick(cd.comorb);
+  let aph,aco2,apao2,afio2;
+  if(key==="ards"){ afio2=1.0; const pf=Math.round(lerp(190,68,sev)); apao2=Math.round(pf*afio2); aph=rnd(7.28,7.42); aco2=rndInt(33,46); }
+  else if(key==="copd"){ afio2=0.35; aph=rnd(7.15,7.28); aco2=rndInt(66,94); apao2=rndInt(48,62); }
+  else if(key==="asthma"){ afio2=0.5; aph=rnd(7.14,7.30); aco2=rndInt(48,80); apao2=rndInt(55,74); }
+  else { afio2=0.4; aph=rnd(7.36,7.43); aco2=rndInt(37,43); apao2=rndInt(160,240); }
+  const pf=Math.round(apao2/afio2);
+  const intub=pick(cd.intub).replace("{sat}",rndInt(78,88)).replace("{ph}",aph.toFixed(2)).replace("{co2}",aco2);
+  const needsPressor=(key==="ards"||key==="copd")&&sev>0.5;
+  const support=(needsPressor?`Noradrenalin ${rnd(0.05,0.35).toFixed(2)} µg/kg/dk · `:"Vazopresör yok · ")+"propofol + fentanil sedasyonu";
+  P.case={day,story,comorb,intub,aph,aco2,apao2,afio2,pf,support,goal:cd.goal};
+}
+function renderCase(){
+  const c=P.case, sc=P.sc, L=(k,v)=>`<div class="cl"><div class="ck">${k}</div><div class="cvv">${v}</div></div>`;
+  document.getElementById("case-day").textContent="Entübasyonun "+c.day+". günü";
+  document.getElementById("case-body").innerHTML=
+    L("Öykü",`${P.name}, ${P.age} yaşında ${P.sex.toLowerCase()}; ${c.story}.`)+
+    L("Komorbidite",c.comorb)+
+    L("Entübasyon",c.intub)+
+    `<div class="abgline">Giriş ABG: pH <b>${c.aph.toFixed(2)}</b> · PaCO₂ <b>${c.aco2}</b> · PaO₂ <b>${c.apao2}</b> (FiO₂ %${Math.round(c.afio2*100)}) → P/F <b>${c.pf}</b></div>`+
+    L("Destek",c.support)+
+    `<div class="goal"><b>Hedef:</b> ${c.goal}</div>`;
+}
+
+function renderTargets(){
+  const permissive=P.key!=="normal";
+  const items=[["SpO₂","88–95 %"],["PaO₂","55–80"],["pH",permissive?"7.25–7.45":"7.35–7.45"],["Plato","< 30"],["ΔP","< 15"],["Vt","6 mL/kg"],["Laktat","< 2"]];
+  document.getElementById("targets").innerHTML=items.map(([k,v])=>`<span class="chip">${k} <b>${v}</b></span>`).join("");
+}
+
+/* ==========================================================================
+   DALGA FORMLARI
+   ========================================================================== */
+function breathVals(t,ph){
+  const {Ti,tau,dispVt,dispMode,dispPinsp,totalPEEP,Rt,Ceff,pmus,flowLps}=ph;
+  let p,f,v;
+  const trigNotch=(pmus>0&&t<0.12)?-(pmus*0.25)*(1-t/0.12):0;
+  if(dispMode==="VC"){
+    if(t<Ti){ f=flowLps; v=flowLps*t*1000; p=totalPEEP+Rt*flowLps+v/Ceff; }
+    else{ const te=t-Ti; v=dispVt*Math.exp(-te/tau); f=-(dispVt/1000)/tau*Math.exp(-te/tau); p=totalPEEP+v/Ceff; }
+  } else {
+    const pset=dispPinsp||(dispVt/Ceff);
+    if(t<Ti){ v=dispVt*(1-Math.exp(-t/tau)); f=(pset/Rt)*Math.exp(-t/tau); p=totalPEEP+pset; }
+    else{ const te=t-Ti; v=dispVt*Math.exp(-te/tau); f=-(dispVt/1000)/tau*Math.exp(-te/tau); p=totalPEEP+v/Ceff; }
+  }
+  return {p:p+trigNotch,f,v};
+}
+function capnoVal(t,ph){
+  const {Ti,Ttot,tau,etco2}=ph;
+  if(t<Ti) return etco2*Math.max(0,1-t/(Ti*0.25))*0 ; // inspirasyon: 0
+  const te=t-Ti, Te=Ttot-Ti;
+  const rise=1-Math.exp(-te/(0.12+tau*0.5));       // obstrüksiyonda yavaş = shark-fin
+  const slope=1+0.25*Math.min(1,tau/0.6)*(te/Math.max(Te,0.1));
+  return etco2*rise*Math.min(1,slope);
+}
+
+const scope=document.getElementById("scope"),sctx=scope.getContext("2d");
+const capnoC=document.getElementById("capno"),cctx=capnoC.getContext("2d");
+let W=scope.width,H=scope.height,cursor=0;
+let bufP=new Float32Array(W).fill(NaN),bufF=new Float32Array(W).fill(NaN),bufV=new Float32Array(W).fill(NaN);
+let CW=capnoC.width,capBuf=new Float32Array(CW).fill(NaN),capCur=0;
+const PX=95, CPX=42;
+const bodyFont=()=>getComputedStyle(document.body).fontFamily;
+
+function drawScope(ph){
+  const lanes=[
+    {buf:bufP,col:"#37d99a",lab:"Basınç  cmH₂O",min:-6,max:Math.max(42,ph.pip+6),
+      read:`PIP ${Math.round(ph.pip)} · Pplat ${Math.round(ph.plateau)}`, hi:Math.max(42,ph.pip+6)},
+    {buf:bufF,col:"#22d3ee",lab:"Akım  L/sn",min:-Math.max(1.2,ph.flowLps+0.4),max:Math.max(1.2,ph.flowLps+0.4),
+      read:`Tepe ${ph.flowLps.toFixed(1)} L/sn`, hi:Math.max(1.2,ph.flowLps+0.4)},
+    {buf:bufV,col:"#f7b733",lab:"Volüm  mL",min:0,max:Math.max(560,ph.dispVt*1.3),
+      read:`Vt ${Math.round(ph.dispVt)} mL`, hi:Math.max(560,ph.dispVt*1.3)},
+  ];
+  sctx.clearRect(0,0,W,H); const laneH=H/3, fnt=bodyFont();
+  lanes.forEach((L,i)=>{
+    const y0=i*laneH,pad=10,top=y0+pad,bot=y0+laneH-pad;
+    sctx.strokeStyle="#101a25"; sctx.lineWidth=1; sctx.beginPath();
+    for(let gx=0;gx<W;gx+=60){sctx.moveTo(gx,y0);sctx.lineTo(gx,y0+laneH);} sctx.stroke();
+    const zy=top+(bot-top)*(1-(0-L.min)/(L.max-L.min));
+    sctx.strokeStyle="#1b2836"; sctx.beginPath(); sctx.moveTo(0,zy); sctx.lineTo(W,zy); sctx.stroke();
+    if(i>0){sctx.strokeStyle="#141f2b";sctx.beginPath();sctx.moveTo(0,y0);sctx.lineTo(W,y0);sctx.stroke();}
+    // eksen ölçek değerleri (sağ kenar)
+    sctx.textAlign="right"; sctx.fillStyle="rgba(120,140,158,.55)"; sctx.font="9.5px "+fnt;
+    const fmt=v=>Math.abs(v)>=100?Math.round(v):v.toFixed(v%1?1:0);
+    sctx.fillText(fmt(L.max), W-4, top+8);
+    sctx.fillText("0", W-4, zy+3);
+    if(L.min<-0.01) sctx.fillText(fmt(L.min), W-4, bot);
+    // canlı sayısal okuma (lane rengi)
+    sctx.fillStyle=L.col; sctx.font="12px "+fnt; sctx.fillText(L.read, W-40, y0+14);
+    // etiket
+    sctx.textAlign="left"; sctx.fillStyle="rgba(120,140,158,.75)"; sctx.font="11px "+fnt; sctx.fillText(L.lab,8,y0+14);
+    // dalga formu
+    sctx.strokeStyle=L.col; sctx.lineWidth=1.7; sctx.lineJoin="round"; sctx.shadowColor=L.col; sctx.shadowBlur=6;
+    sctx.beginPath(); let pen=false;
+    for(let x=0;x<W;x++){ const val=L.buf[x]; if(isNaN(val)){pen=false;continue;}
+      const yy=top+(bot-top)*(1-clamp((val-L.min)/(L.max-L.min),0,1)); if(!pen){sctx.moveTo(x,yy);pen=true;}else sctx.lineTo(x,yy);}
+    sctx.stroke(); sctx.shadowBlur=0;
+  });
+}
+function drawCapno(ph){
+  cctx.clearRect(0,0,CW,capnoC.height); const h=capnoC.height,pad=8,top=pad,bot=h-pad,max=60,fnt=bodyFont();
+  cctx.strokeStyle="#141f2b"; cctx.lineWidth=1;
+  [40].forEach(v=>{const y=top+(bot-top)*(1-v/max);cctx.beginPath();cctx.moveTo(0,y);cctx.lineTo(CW,y);cctx.stroke();});
+  // ölçek değerleri (sol kenar)
+  cctx.textAlign="left"; cctx.fillStyle="rgba(120,140,158,.55)"; cctx.font="9.5px "+fnt;
+  cctx.fillText("60",3,top+8); cctx.fillText("40",3,top+(bot-top)*(1-40/max)+3); cctx.fillText("0",3,bot);
+  cctx.strokeStyle="#f7b733"; cctx.lineWidth=1.6; cctx.lineJoin="round"; cctx.shadowColor="#f7b733"; cctx.shadowBlur=5;
+  cctx.beginPath(); let pen=false;
+  for(let x=0;x<CW;x++){const val=capBuf[x]; if(isNaN(val)){pen=false;continue;} const yy=top+(bot-top)*(1-clamp(val/max,0,1)); if(!pen){cctx.moveTo(x,yy);pen=true;}else cctx.lineTo(x,yy);}
+  cctx.stroke(); cctx.shadowBlur=0;
+  cctx.textAlign="right"; cctx.fillStyle="rgba(247,183,51,.95)"; cctx.font="13px "+fnt; cctx.fillText("EtCO₂ "+Math.round(ph.etco2)+" mmHg",CW-6,16); cctx.textAlign="left";
+}
+/* ==========================================================================
+   ANA DÖNGÜ
+   ========================================================================== */
+function formatClock(sec){const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60);return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");}
+
+/* --- monitör alarm sesi (Web Audio) — ventilasyon bozulması / instabilitede --- */
+let alarmLevel=0, alarmAcc=0, lastAlarmLevel=0;
+const Snd={
+  ctx:null, master:null, on:false,
+  ensure(){ if(!this.ctx){ this.ctx=new (window.AudioContext||window.webkitAudioContext)(); this.master=this.ctx.createGain(); this.master.gain.value=0.6; this.master.connect(this.ctx.destination); } if(this.ctx.state==="suspended") this.ctx.resume(); },
+  toggle(){ this.ensure(); this.on=!this.on; return this.on; },
+  tone(freq,dur,vol,when,type){ if(!this.on||!this.ctx) return; const t=this.ctx.currentTime+(when||0); const o=this.ctx.createOscillator(),g=this.ctx.createGain(); o.type=type||"sine"; o.frequency.value=freq; g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol,t+0.008); g.gain.exponentialRampToValueAtTime(0.0001,t+dur); o.connect(g); g.connect(this.master); o.onended=()=>{try{o.disconnect();g.disconnect();}catch(e){}}; o.start(t); o.stop(t+dur+0.03); },
+};
+function alarmBurst(level){
+  if(level>=2){ [988,880,988,880,988].forEach((f,i)=>Snd.tone(f,0.12,0.34,i*0.15,"square")); }  // kritik: 5'li aciliyet dizisi
+  else { Snd.tone(660,0.14,0.26,0,"square"); Snd.tone(660,0.14,0.26,0.20,"square"); }             // uyarı: çift bip
+}
+function audioTick(dtReal){
+  if(!Snd.on){ lastAlarmLevel=0; return; }
+  const lvl=arrested?2:alarmLevel;
+  if(lvl>lastAlarmLevel && lvl>0){ alarmBurst(lvl); alarmAcc=0; }   // instabilite başlar başlamaz hemen çal
+  lastAlarmLevel=lvl;
+  alarmAcc+=dtReal;
+  const interval=lvl>=2?1.0:lvl===1?2.6:0;
+  if(interval>0 && alarmAcc>=interval){ alarmAcc=0; alarmBurst(lvl); }
+}
+
+function frame(ts){
+ try{
+  const dtReal=clamp((ts-lastTs)/1000,0,0.05); lastTs=ts;   // negatif dt engellenir (kinetik stabilitesi)
+  const ph=physiology();
+
+  if(running&&!arrested){
+    simSec+=dtReal*TIME_SCALE; integrateGas(dtReal*TIME_SCALE/60, ph); evolve(dtReal*TIME_SCALE/3600,ph);
+    if(abgPending>0){abgPending-=dtReal; if(abgPending<=0)commitAbg();}
+    if(suctionTimer>0)suctionTimer-=dtReal;
+    if(bpBoost>0)bpBoost=Math.max(0,bpBoost-dtReal*1.2);
+    if(flashTimer>0)flashTimer-=dtReal;
+    // dalga formu (gerçek zaman)
+    breathClock+=dtReal; if(breathClock>=ph.Ttot)breathClock-=ph.Ttot;
+    const adv=Math.max(1,Math.round(PX*dtReal));
+    for(let s=0;s<adv;s++){ const bt=clamp(breathClock-dtReal*(adv-1-s)/adv,0,ph.Ttot); const bv=breathVals(bt,ph);
+      let pp=bv.p,ff=bv.f,vv=bv.v;
+      if(P.secretions>0.4){const n=(Math.random()-0.5)*P.secretions*0.5;ff+=n;} // testere-diş
+      if(P.disconnected){pp=0;ff=0;vv=0;}
+      bufP[cursor]=pp;bufF[cursor]=ff;bufV[cursor]=vv;
+      const gap=(cursor+6)%W; bufP[gap]=NaN;bufF[gap]=NaN;bufV[gap]=NaN; cursor=(cursor+1)%W; }
+    const cadv=Math.max(1,Math.round(CPX*dtReal));
+    for(let s=0;s<cadv;s++){ const bt=clamp(breathClock-dtReal*(cadv-1-s)/cadv,0,ph.Ttot); capBuf[capCur]=P.disconnected?0:capnoVal(bt,ph);
+      const g=(capCur+4)%CW; capBuf[g]=NaN; capCur=(capCur+1)%CW; }
+  }
+  drawScope(ph); drawCapno(ph);
+
+  if(!disp)disp={spo2:ph.spo2,etco2:ph.etco2,hr:ph.hr,sys:ph.sys,dia:ph.dia};
+  const k=running?clamp(dtReal*1.4,0,1):0;
+  let spo2Tgt=ph.spo2; if(suctionTimer>0)spo2Tgt-=12*clamp(suctionTimer,0,1);
+  disp.spo2=lerp(disp.spo2,spo2Tgt,k); disp.etco2=lerp(disp.etco2,ph.etco2,k);
+  disp.hr=lerp(disp.hr,ph.hr,k); disp.sys=lerp(disp.sys,ph.sys+bpBoost,k); disp.dia=lerp(disp.dia,ph.dia+bpBoost*0.6,k);
+
+  renderReadouts(ph); updateHistory(ph); audioTick(dtReal);
+  document.getElementById("clock").textContent=formatClock(simSec);
+ }catch(err){ if(!frame._warned){console.error("Simülasyon karesi hata verdi (döngü sürüyor):",err); frame._warned=true;} }
+  requestAnimationFrame(frame);   // bir kare hata verse bile animasyon döngüsü asla durmaz
+}
+
+let _mechCache="",_coachCache="";   // her kare gereksiz innerHTML/DOM yeniden-kurulumunu önler
+function setVital(id,val,alarm){const el=document.getElementById(id);el.querySelector(".num").textContent=val;el.classList.toggle("alarm",alarm);}
+function renderReadouts(ph){
+  setVital("v-spo2",Math.round(disp.spo2),disp.spo2<88);
+  setVital("v-etco2",Math.round(disp.etco2),disp.etco2>55||disp.etco2<22);
+  setVital("v-hr",Math.round(disp.hr),disp.hr>120||disp.hr<50);
+  document.querySelector("#v-abp .num").textContent=`${Math.round(disp.sys)}/${Math.round(disp.dia)}`;
+  document.getElementById("v-abp").classList.toggle("alarm",ph.map<65);
+  const mech=[
+    ["PIP",Math.round(ph.pip),"cmH₂O",ph.pip>35?"hot":""],
+    ["ΔP",Math.round(ph.drivingP),"cmH₂O",ph.drivingP>15?"hot":ph.drivingP<14?"ok":""],
+    ["Vte",Math.round(ph.vt),"mL",""],
+    ["Toplam SS",ph.effRR+(ph.spontRR>0?" ⟳":""),"/dk",ph.spontRR>0?"warn":""],
+    ["Oto-PEEP",ph.autoPEEP.toFixed(1),"cmH₂O",ph.autoPEEP>6?"hot":ph.autoPEEP<1?"ok":""],
+    ["Direnç",Math.round(ph.Rt),"cmH₂O/L/s",ph.Rt>20?"hot":""],
+    ["Dürtü",ph.drive.toFixed(1),ph.dyssync>0.3?"⚠uyumsuz":"×norm",ph.dyssync>0.3?"hot":""],
+  ];
+  const _mh=mech.map(([k,v,u,c])=>`<div class="mcell ${c}" data-tip="${(TIPS[k]||'').replace(/"/g,'&quot;')}"><div class="mk">${k}</div><div class="mv">${v} <small>${u}</small></div></div>`).join("");
+  if(_mh!==_mechCache){ document.getElementById("mech").innerHTML=_mh; _mechCache=_mh; }
+  renderAlarm(ph); renderCoach(ph,ph.vt/P.pbwv); renderStatus(ph); renderWean(ph);
+}
+
+function renderAlarm(ph){
+  const el=document.getElementById("alarm"); let level=0,txt="Stabil",sub="Ayarlar izleniyor";
+  const set=(l,t,s)=>{if(l>level){level=l;txt=t;sub=s;}};
+  if(ph.disc){set(2,"DİSKONNEKSİYON","Ventilatör bağlantısını kontrol edin");}
+  if(ph.apnea){set(2,"APNE — yedek ventilasyon","Mod/sedasyonu gözden geçirin");}
+  if(P.pneumo>0){set(2,"Pnömotoraks kuşkusu","Ani basınç↑ + hipotansiyon — göğüs tüpü");}
+  if(ph.spo2<92)set(1,"Düşük SpO₂","Oksijenasyonu artırın");
+  if(ph.spo2<85)set(2,"KRİTİK HİPOKSEMİ","FiO₂ ve PEEP yükseltin");
+  if(ph.pip>35)set(1,"Yüksek tepe basıncı","Direnç/volüm kontrol");
+  if(ph.plateau>30)set(2,"Yüksek plato","Vt/ΔP azaltın — VILI");
+  if(ph.autoPEEP>6)set(1,"Oto-PEEP","Ekspiryumu uzatın");
+  if(ph.dyssync>0.4)set(1,"Hasta-ventilatör uyumsuzluğu","Sedasyon/mod/tetik ayarlayın");
+  if(ph.ph<7.25)set(2,"Ağır asidoz","Ventilasyonu ayarlayın");
+  if(ph.ph>7.55)set(1,"Alkaloz","Ventilasyonu azaltın");
+  if(ph.map<65)set(1,"Hipotansiyon","Hava yolu basıncı / volüm durumu");
+  if(ph.map<55)set(2,"Ağır hipotansiyon","PEEP/pnömotoraks?");
+  alarmLevel=level;   // ses için gerçek alarm seviyesi
+  if(flashTimer>0){document.getElementById("alarm-txt").textContent=flashMsg;document.getElementById("alarm-sub").textContent="müdahale";el.className="alarm-strip warn";return;}
+  el.className="alarm-strip"+(level===1?" warn":level===2?" crit":"");
+  document.getElementById("alarm-txt").textContent=level===0?"Stabil — alarm yok":txt;
+  document.getElementById("alarm-sub").textContent=level===0?(M.extubReady?"Ekstübasyon kriterleri karşılanıyor ✓":"İyi gidiyor"):sub;
+}
+
+function renderCoach(ph,vtkg){
+  const cues=[],add=(sev,t,s)=>cues.push({sev,t,s});
+  if(ph.disc){add("c","Ventilatör bağlantısı kesik","'Devreyi düzelt' ile yeniden bağlayın");}
+  if(P.pneumo>0){add("c","Pnömotoraks","PIP/plato ani yükseldi, TA düştü — göğüs tüpü");}
+  if(ph.apnea){add("c","Apne / yetersiz spontan çaba","Sedasyonu azaltın ya da zorunlu mod");}
+  if(P.leak>0){add("w","Devre kaçağı","Verilen Vt düşük, oto-tetikleme olabilir");}
+  if(vtkg>8)add(vtkg>10?"c":"w",`Tidal volüm yüksek: ${vtkg.toFixed(1)} mL/kg`,"6 mL/kg hedefleyin");
+  else if(vtkg<4.5&&ph.mandRR>0)add("w",`Tidal volüm düşük: ${vtkg.toFixed(1)} mL/kg`,"Ölü boşluk ventilasyonu artar");
+  if(ph.drivingP>15)add(ph.drivingP>18?"c":"w",`Driving basınç ${Math.round(ph.drivingP)}`,"Vt azaltın / PEEP optimize edin");
+  if(ph.mechPower>17)add("w",`Mekanik güç ${ph.mechPower.toFixed(0)} J/dk`,"VILI riski — Vt/SS/basınç düşürün");
+  if(ph.autoPEEP>6)add("c",`Oto-PEEP ${ph.autoPEEP.toFixed(1)}`,"SS↓ ve İ:E↓; bronkodilatör düşün");
+  if(ph.dyssync>0.3)add("w","Hasta ventilatörle uyumsuz","Sedasyonu artırın, tetiği hassaslaştırın ya da PS'e geçin");
+  if(ph.canSpont&&ph.pmus>14)add(ph.pmus>19?"c":"w","Güçlü solunum çabası (P-SILI riski)","Sedasyonu artırın; ağır ARDS + hipoksemide erken nöromusküler blokaj düşünün");
+  if(ph.VCO2>270)add("w",`Yüksek CO₂ üretimi (${Math.round(ph.VCO2)} mL/dk)`,"Ateş/ajitasyon/solunum işi; sedasyon (±paralizi) CO₂ yükünü ve O₂ ihtiyacını azaltır");
+  if(P.muscle<0.5&&ph.rsbi!==null&&ph.rsbi>105)add("w","Solunum pompası zayıf (yüksek RSBI)","Kas gücü dönene dek destekleyin; erken SBT başarısız olur — sabırlı weaning");
+  if(ph.spo2<88)add("c",`SpO₂ ${Math.round(ph.spo2)}%`,ph.pfRatio<150&&S.peep<12?"PEEP artırın / rekrütman / prone":"FiO₂ artırın");
+  else if(ph.spo2>96&&S.fio2>0.5)add("w",`SpO₂ ${Math.round(ph.spo2)}% · FiO₂ %${Math.round(S.fio2*100)}`,"FiO₂'yi azaltın");
+  const permMin=P.key!=="normal"?7.25:7.35;
+  if(ph.ph<permMin){ if(ph.paco2>48)add(ph.ph<7.2?"c":"w",`Respiratuar asidoz · pH ${ph.ph.toFixed(2)}`,"Dakika ventilasyonu artırın"); else add("w",`Asidoz · pH ${ph.ph.toFixed(2)}`,"Metabolik neden + laktat"); }
+  else if(ph.ph>7.5)add("w",`Alkaloz · pH ${ph.ph.toFixed(2)}`,P.sc.chronicCO2?"Kronik retansiyoncuyu aşırı ventile etmeyin":"Ventilasyonu azaltın");
+  if(ph.map<65)add(ph.map<55?"c":"w",`OAB ${Math.round(ph.map)}`,"Sıvı/vazopresör; PEEP'i gözden geçirin");
+  if(P.lactate>3)add("w",`Laktat ${P.lactate.toFixed(1)}`,"Doku perfüzyonu yetersiz");
+  if(M.extubReady)add("g","Ekstübasyona hazır görünüyor",`RSBI ${Math.round(ph.rsbi)} · SBT kriterleri karşılanıyor`);
+  let _ch;
+  if(cues.length===0){ _ch=`<div class="cue g"><span class="ci"></span><div>Ayarlar akciğer koruyucu ✓ <small>Hasta iyiye gidiyor.</small></div></div>`; }
+  else { const order={c:0,w:1,g:2}; cues.sort((a,b)=>order[a.sev]-order[b.sev]);
+    _ch=cues.slice(0,6).map(c=>`<div class="cue ${c.sev}"><span class="ci"></span><div>${c.t} <small>— ${c.s}</small></div></div>`).join(""); }
+  if(_ch!==_coachCache){ document.getElementById("coach").innerHTML=_ch; _coachCache=_ch; }
+}
+
+const spark=document.getElementById("spark"),spx=spark.getContext("2d"); let histAcc=0;
+function updateHistory(ph){ histAcc++; if(histAcc>=8){histAcc=0; history.push(ph.pfRatio); if(history.length>120)history.shift();} }
+function renderStatus(ph){
+  const idx=conditionIndex(ph); let label,col;
+  if(arrested){label="Kardiyak arrest";col="var(--crit)";}
+  else if(idx>=78){label="İyileşiyor";col="var(--good)";}
+  else if(idx>=60){label="Stabil";col="var(--good)";}
+  else if(idx>=42){label="Kötüleşiyor";col="var(--warn)";}
+  else if(idx>=24){label="Kritik";col="var(--warn)";}
+  else{label="Çok kritik";col="var(--crit)";}
+  document.getElementById("stat-label").textContent=label; document.getElementById("stat-label").style.color=col;
+  document.getElementById("stat-idx").textContent="indeks "+idx+"/100";
+  const bar=document.getElementById("stat-bar"); bar.style.width=idx+"%";
+  bar.style.background=idx>=60?"linear-gradient(90deg,#1c8f66,#37d99a)":idx>=42?"linear-gradient(90deg,#8a6a15,#f7b733)":"linear-gradient(90deg,#8a2b39,#fb5163)";
+  document.getElementById("spark-now").textContent="P/F "+Math.round(ph.pfRatio);
+  const w=spark.width,h=spark.height,max=300,fnt=bodyFont(); spx.clearRect(0,0,w,h);
+  // ARDS ağırlık eşikleri: 100 (ağır) ve 200 (orta) çizgileri
+  spx.strokeStyle="#16222f";spx.lineWidth=1;
+  [100,200].forEach(v=>{const y=h-(v/max)*h;spx.beginPath();spx.moveTo(24,y);spx.lineTo(w,y);spx.stroke();});
+  spx.fillStyle="rgba(120,140,158,.55)"; spx.font="9px "+fnt; spx.textAlign="left";
+  spx.fillText("300",2,9); spx.fillText("200",2,h-(200/max)*h+3); spx.fillText("100",2,h-(100/max)*h+3); spx.fillText("0",2,h-2);
+  if(history.length>1){ const X=i=>24+i/(Math.max(1,history.length-1))*(w-24),Y=v=>h-(clamp(v,0,max)/max)*h;
+    spx.beginPath();spx.moveTo(X(0),Y(history[0])); history.forEach((v,i)=>spx.lineTo(X(i),Y(v)));
+    spx.strokeStyle=col;spx.lineWidth=2;spx.lineJoin="round";spx.stroke();
+    spx.lineTo(w,h);spx.lineTo(X(0),h);spx.closePath();spx.fillStyle="rgba(55,217,154,.06)";spx.fill();
+    const lx=X(history.length-1),ly=Y(history[history.length-1]); spx.fillStyle=col;spx.beginPath();spx.arc(lx,ly,3,0,7);spx.fill();
+    spx.fillStyle=col; spx.font="11px "+fnt; spx.textAlign="right"; spx.fillText(Math.round(history[history.length-1]), lx-6, ly-5); spx.textAlign="left"; }
+}
+
+/* ==========================================================================
+   DEBRIEF
+   ========================================================================== */
+function openDebrief(){
+  const T=Math.max(1,M.n);
+  const pct=v=>Math.round(100*v/T), fr=v=>v/T;
+  const avgMP=M.mpSum/T, avgDP=M.dpSum/T, avgPlat=M.platSum/T;
+  // --- alan skorları (0-100, kademeli — sınırdaki değerlere kısmi puan) ---
+  const ox=clamp(100-110*fr(M.spo2low)-45*fr(M.hyperox)-1.2*Math.max(0,86-M.minSpo2),0,100);
+  const vent=clamp(100-45*(1-fr(M.phok))-250*Math.max(0,7.2-M.minPh)-0.4*Math.max(0,M.maxPaco2-75),0,100);
+  const prot=clamp(100-6*Math.max(0,avgDP-13)-4*Math.max(0,avgPlat-28)-1.5*Math.max(0,avgMP-16)-42*(1-fr(M.vtok))-30*fr(M.barotrauma),0,100);
+  const hemo=clamp(100-55*fr(M.hypotension)-3*Math.max(0,66-M.minMap)-7*Math.max(0,M.maxLac-2.5),0,100);
+  const safety=clamp(100-14*M.complications.size-40*fr(M.pneumoTime)-25*fr(M.autopeep),0,100);
+  const wean=clamp(100-110*fr(M.dyssyncTime)+(M.extubReady?12:0),0,100);
+  const domains=[["Oksijenasyon",ox,0.20],["Ventilasyon / asit-baz",vent,0.15],["Akciğer koruma (VILI)",prot,0.28],
+    ["Hemodinami",hemo,0.13],["Güvenlik / komplikasyon",safety,0.14],["Uyum / weaning",wean,0.10]];
+  let overall=domains.reduce((a,d)=>a+d[1]*d[2],0);
+  if(arrested) overall=Math.min(overall*0.45,42);
+  overall=Math.round(clamp(overall,0,100));
+  const grade=overall>=88?"A":overall>=75?"B":overall>=60?"C":overall>=45?"D":"F";
+  const gcol=overall>=75?"var(--good)":overall>=60?"var(--warn)":"var(--crit)";
+  document.getElementById("dbg-grade").textContent=grade; document.getElementById("dbg-grade").style.color=gcol;
+  document.getElementById("dbg-gradelbl").textContent=overall+"/100";
+  document.getElementById("dbg-sub").textContent=`${P.name}, ${P.age} · ${formatClock(simSec)} ventilasyon${arrested?" · ✝ EX":""}`;
+  // --- alan çubukları ---
+  const dcol=s=>s>=75?"linear-gradient(90deg,#1c8f66,#37d99a)":s>=55?"linear-gradient(90deg,#8a6a15,#f7b733)":"linear-gradient(90deg,#8a2b39,#fb5163)";
+  document.getElementById("dbg-domains").innerHTML=domains.map(d=>
+    `<div class="domrow"><span class="dn">${d[0]}</span><span class="dombar"><i style="width:${Math.round(d[1])}%;background:${dcol(d[1])}"></i></span><span class="dv">${Math.round(d[1])}</span></div>`).join("");
+  // --- ölçüm tablosu ---
+  const st=(k,v,c)=>`<div class="stt"><span class="stk">${k}</span><span class="stv ${c||''}">${v}</span></div>`;
+  const pc=(v,g)=>{const p=pct(v);return {t:p+"%",c:p>=g?"ok":p>=g*0.6?"warn":"crit"};};
+  const sp=pc(M.spo2ok,90),phT=pc(M.phok,90),dp=pc(M.dpok,85),pl=pc(M.platok,90),vt=pc(M.vtok,90),lp=pc(M.lungprot,80);
+  const rows=[
+    st("Hedef SpO₂ (88–96) süresi",sp.t,sp.c), st("Hedef pH süresi",phT.t,phT.c),
+    st("Koruyucu ΔP (<15) süresi",dp.t,dp.c), st("Plato <30 süresi",pl.t,pl.c),
+    st("Koruyucu Vt (≤8 mL/kg) süresi",vt.t,vt.c), st("Akc. koruyucu bileşke süre",lp.t,lp.c),
+    st("Ort. sürücü basınç",avgDP.toFixed(1)+" cmH₂O",avgDP<15?"ok":avgDP<18?"warn":"crit"),
+    st("Ort. plato",avgPlat.toFixed(0)+" cmH₂O",avgPlat<28?"ok":avgPlat<30?"warn":"crit"),
+    st("Ort. mekanik güç",avgMP.toFixed(1)+" J/dk",avgMP<17?"ok":avgMP<22?"warn":"crit"),
+    st("VILI dozu (ΔP·dk, >15)",Math.round(M.viliDose),M.viliDose<30?"ok":M.viliDose<120?"warn":"crit"),
+    st("Yüksek FiO₂ (>%60) süresi",(M.hiFio2/60).toFixed(0)+" dk",M.hiFio2/60<15?"ok":"warn"),
+    st("Hipotansiyon (OAB<65) süresi",pct(M.hypotension)+"%",pct(M.hypotension)<5?"ok":pct(M.hypotension)<20?"warn":"crit"),
+    st("Oto-PEEP (>5) süresi",pct(M.autopeep)+"%",pct(M.autopeep)<5?"ok":pct(M.autopeep)<20?"warn":"crit"),
+    st("Uyumsuzluk süresi",pct(M.dyssyncTime)+"%",pct(M.dyssyncTime)<5?"ok":pct(M.dyssyncTime)<20?"warn":"crit"),
+    st("Maks. ΔP",Math.round(M.maxDP)+" cmH₂O",M.maxDP<15?"ok":M.maxDP<20?"warn":"crit"),
+    st("Maks. plato",Math.round(M.maxPlat)+" cmH₂O",M.maxPlat<30?"ok":M.maxPlat<35?"warn":"crit"),
+    st("En düşük SpO₂",Math.round(M.minSpo2)+"%",M.minSpo2>=88?"ok":M.minSpo2>=80?"warn":"crit"),
+    st("En düşük OAB",Math.round(M.minMap)+" mmHg",M.minMap>=65?"ok":M.minMap>=55?"warn":"crit"),
+    st("Maks. laktat",M.maxLac.toFixed(1),M.maxLac<2?"ok":M.maxLac<4?"warn":"crit"),
+    st("Maks. PaCO₂ / en düşük pH",Math.round(M.maxPaco2)+" / "+M.minPh.toFixed(2),(M.maxPaco2<55&&M.minPh>=7.25)?"ok":M.minPh>=7.2?"warn":"crit"),
+    st("Komplikasyon",M.complications.size+" adet",M.complications.size===0?"ok":M.complications.size<3?"warn":"crit"),
+    st("Ekstübasyona hazır",M.extubReady?"Evet ✓":"Hayır",M.extubReady?"ok":"warn"),
+  ];
+  document.getElementById("dbg-stats").innerHTML=rows.join("");
+  // proto ladder
+  const cur=nearestProto(); document.getElementById("proto").innerHTML=
+    PROTO.map((r,i)=>`<div class="${i===cur?'cur':''}">${Math.round(r[0]*100)}<br>${r[1]}</div>`).join("");
+  // notes
+  const notes=[],N=(sev,t)=>notes.push({sev,t});
+  if(prot>=80)N("g","Akciğer koruyucu ventilasyon çoğunlukla sağlandı (ΔP<15, plato<30, Vt≤8)."); else N(prot<50?"c":"w",`Akciğer koruma yetersiz — koruyucu bileşke süre yalnızca %${pct(M.lungprot)}.`);
+  if(M.viliDose>120)N("c",`Yüksek VILI dozu (${Math.round(M.viliDose)} cmH₂O·dk) — belirgin ventilatör ilişkili akciğer hasarı riski.`);
+  else if(M.viliDose>30)N("w",`Orta düzey VILI maruziyeti (${Math.round(M.viliDose)} cmH₂O·dk).`);
+  if(avgMP>20)N("w",`Ortalama mekanik güç yüksek (${avgMP.toFixed(0)} J/dk).`);
+  if(pct(M.spo2ok)<80)N("w",`Hedef SpO₂ süresi düşük (%${pct(M.spo2ok)}); en düşük SpO₂ %${Math.round(M.minSpo2)}.`);
+  if(fr(M.hyperox)>0.15)N("w","Sık hiperoksemi + yüksek FiO₂ — oksijen toksisitesi/absorpsiyon atelektazisi.");
+  if(pct(M.hypotension)>15)N("w",`Uzun hipotansiyon süresi (%${pct(M.hypotension)}); en düşük OAB ${Math.round(M.minMap)}.`);
+  if(M.maxLac>4)N("w",`Laktat ${M.maxLac.toFixed(1)}'e ulaştı — doku hipoperfüzyonu (sıvı/vazopresör).`);
+  if(pct(M.autopeep)>10)N("w","Belirgin oto-PEEP süresi — ekspiryum süresini uzatın (SS↓, İ:E↓).");
+  if(pct(M.dyssyncTime)>15)N("w",`Hasta-ventilatör uyumsuzluğu (%${pct(M.dyssyncTime)}) — sedasyon/mod/tetik.`);
+  if(M.complications.size)N("w","Gelişen komplikasyonlar: "+[...M.complications].join(", ")+"."); else N("g","Hiç komplikasyon gelişmedi.");
+  if(M.extubReady)N("g","Oturum sonunda ekstübasyon (SBT) kriterleri karşılanıyordu.");
+  if(arrested)N("c","Hasta kaybedildi — kritik parametreler uzun süre düzeltilemedi.");
+  document.getElementById("dbg-notes").innerHTML=notes.map(n=>`<li><span class="ci" style="background:${n.sev==='g'?'var(--good)':n.sev==='c'?'var(--crit)':'var(--warn)'}"></span>${n.t}</li>`).join("");
+  document.getElementById("debrief").classList.add("show");
+}
+function nearestProto(){ let best=0,bd=9; PROTO.forEach((r,i)=>{const d=Math.abs(r[0]-S.fio2)+Math.abs(r[1]-S.peep)/20; if(d<bd){bd=d;best=i;}}); return best; }
+document.getElementById("debrief-btn").addEventListener("click",openDebrief);
+document.getElementById("dbg-close").addEventListener("click",()=>document.getElementById("debrief").classList.remove("show"));
+document.getElementById("arrest-debrief").addEventListener("click",()=>{document.getElementById("arrest").classList.remove("show");openDebrief();});
+
+function triggerArrest(ph){
+  arrested=true; M.arrestFlag=true; let r="Hasta uzun süre kritik durumda kaldı.";
+  if(ph.spo2<52)r="Refrakter hipoksemi — SpO₂ kritik seviyede kaldı.";
+  else if(ph.ph<6.9)r="Ağır respiratuar asidoz — dakika ventilasyonu çok düşüktü.";
+  else if(ph.map<38)r="Ağır hipotansiyon — yüksek hava yolu basıncı/pnömotoraks kardiyak debiyi düşürdü.";
+  document.getElementById("arrest-reason").textContent=r; document.getElementById("arrest").classList.add("show");
+}
+document.getElementById("arrest-reset").addEventListener("click",()=>{initScenario();syncModeButtons();renderTargets();});
+
+/* --- monitör değerleri için hover ipuçları --- */
+const tipEl=document.getElementById("tip");
+function tipText(el){ const k=el.getAttribute("data-tipkey"); if(k) return TIPS[k]||""; return el.getAttribute("data-tip")||""; }
+document.addEventListener("mousemove",e=>{
+  const t=e.target.closest("[data-tip],[data-tipkey]");
+  if(!t){ tipEl.classList.remove("show"); return; }
+  const txt=tipText(t); if(!txt){ tipEl.classList.remove("show"); return; }
+  if(tipEl.dataset.cur!==txt){ tipEl.innerHTML=txt; tipEl.dataset.cur=txt; }
+  tipEl.classList.add("show");
+  const r=tipEl.getBoundingClientRect();
+  let x=e.clientX+15, y=e.clientY+17;
+  if(x+r.width>innerWidth-8) x=e.clientX-r.width-15;
+  if(y+r.height>innerHeight-8) y=Math.max(8,e.clientY-r.height-17);
+  tipEl.style.left=x+"px"; tipEl.style.top=y+"px";
+});
+document.addEventListener("mouseleave",()=>tipEl.classList.remove("show"));
+
+/* start */
+initScenario(); renderTargets(); renderAbg();
+requestAnimationFrame(t=>{lastTs=t;requestAnimationFrame(frame);});
+</script>
